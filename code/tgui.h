@@ -166,7 +166,7 @@ typedef struct TGuiHandlePoolAllocator
 
 void tgui_handle_allocator_init(TGuiHandlePoolAllocator *allocator);
 TGuiHandle tgui_handle_allocator_pull(TGuiHandlePoolAllocator *allocator);
-void tgui_handle_allocator_free(TGuiHandle handle);
+void tgui_handle_allocator_free(TGuiHandlePoolAllocator *allocator, TGuiHandle handle);
 
 typedef struct TGuiState
 {

@@ -76,7 +76,7 @@ static b32 tgui_point_inside_rect(TGuiV2 point, TGuiRect rect)
 void tgui_handle_poll_allocator_init(TGuiHandlePoolAllocator *allocator)
 {
     allocator->buffer_size = TGUI_DEFAULT_POOL_SIZE;
-    allocator->buffer = malloc(allocator->buffer_size);
+    allocator->buffer = (TGuiWidget *)malloc(allocator->buffer_size*sizeof(TGuiWidget));
     allocator->count = 0;
     allocator->free_list = 0;
 }
@@ -94,18 +94,42 @@ TGuiHandle tgui_handle_allocator_pull(TGuiHandlePoolAllocator *allocator)
     handle = allocator->count + 1;
     if(handle >= allocator->buffer_size)
     {
-        // TODO: this is a dynamic pool allocator and need to be reallocated here!
-        // TODO: recalculete the free list here
+        // NOTE: this is a dynamic pool allocator and need to be reallocated here!
+        u32 new_buffer_size = allocator->buffer_size * 2;
+        TGuiWidget *new_buffer = (TGuiWidget *)malloc(new_buffer_size*sizeof(TGuiWidget));
+        memcpy(new_buffer, allocator->buffer, allocator->buffer_size*sizeof(TGuiWidget));
+
+        // NOTE: realloc the free list here
+        TGuiWidgetFree *first_widget = allocator->free_list;
+        TGuiWidgetFree *free_widget = allocator->free_list;
+        while(free_widget)
+        {
+            TGuiWidgetFree *new_free = (TGuiWidgetFree *)(new_buffer + free_widget->handle);
+            new_free->handle = free_widget->handle;
+            if(free_widget->next)
+            {
+                new_free->next = (TGuiWidgetFree *)(new_buffer + free_widget->next->handle);
+            }
+            free_widget = free_widget->next;
+        }
+        allocator->free_list = (TGuiWidgetFree *)(new_buffer + first_widget->handle);
+        
+        free(allocator->buffer);
+        allocator->buffer = new_buffer;
+        allocator->buffer_size = new_buffer_size;
     }
 
     allocator->count++;
     return handle;
 }
 
-void tgui_handle_allocator_free(TGuiHandle handle)
+void tgui_handle_allocator_free(TGuiHandlePoolAllocator *allocator, TGuiHandle handle)
 {
-    UNUSED_VAR(handle);
-    // TODO: implement free list for the pool
+    TGuiWidgetFree *free_widget = allocator->free_list;
+    while(free_widget) free_widget = free_widget->next;
+    free_widget = (TGuiWidgetFree *)(allocator->buffer + handle);
+    free_widget->handle = handle;
+    free_widget->next = 0;
 }
 
 //-----------------------------------------------------
