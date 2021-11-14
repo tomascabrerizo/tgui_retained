@@ -164,9 +164,11 @@ typedef struct TGuiHandlePoolAllocator
     TGuiWidgetFree *free_list;
 } TGuiHandlePoolAllocator;
 
+// TODO: maybe this function should use the global state allocator
 void tgui_handle_allocator_init(TGuiHandlePoolAllocator *allocator);
 TGuiHandle tgui_handle_allocator_pull(TGuiHandlePoolAllocator *allocator);
 void tgui_handle_allocator_free(TGuiHandlePoolAllocator *allocator, TGuiHandle handle);
+void tgui_widget_set(TGuiHandle handle, TGuiWidget widget);
 
 typedef struct TGuiState
 {
