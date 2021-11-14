@@ -9,6 +9,109 @@
 // TODO: Maybe the state should be provided by the application?
 TGuiState tgui_global_state;
 
+//-----------------------------------------------------
+//  NOTE: inline math functions
+//-----------------------------------------------------
+static inline TGuiV2 tgui_v2(f32 x, f32 y)
+{
+    TGuiV2 result;
+    result.x = x;
+    result.y = y;
+    return result;
+}
+
+static inline TGuiV2 tgui_v2_sub(TGuiV2 a, TGuiV2 b)
+{
+    TGuiV2 result = tgui_v2(a.x - b.x, a.y - b.y);
+    return result;
+}
+
+static inline f32 tgui_v2_dot(TGuiV2 a, TGuiV2 b)
+{
+    f32 result = a.x * b.x + a.y * b.y;
+    return result;
+}
+
+static inline f32 tgui_v2_lenght_sqrt(TGuiV2 v)
+{
+    f32 result = tgui_v2_dot(v, v);
+    return result;
+}
+
+static inline TGuiRect tgui_rect_xywh(f32 x, f32 y, f32 width, f32 height)
+{
+    TGuiRect result;
+    result.x = x;
+    result.y = y;
+    result.width = width;
+    result.height = height;
+    return result;
+}
+
+static inline f32 tgui_v2_length(TGuiV2 v)
+{
+    f32 result = sqrtf(tgui_v2_lenght_sqrt(v));
+    return result;
+}
+
+static inline TGuiV2 tgui_v2_normalize(TGuiV2 v)
+{
+    TGuiV2 result = {0};
+    result.x = v.x / tgui_v2_length(v);
+    result.y = v.y / tgui_v2_length(v);
+    return result;
+}
+
+static b32 tgui_point_inside_rect(TGuiV2 point, TGuiRect rect)
+{
+    b32 result = point.x >= rect.x && point.x < (rect.x + rect.width) &&
+                 point.y >= rect.y && point.y < (rect.y + rect.height);
+    return result;
+}
+
+//-----------------------------------------------------
+//  NOTE: memory management functions
+//-----------------------------------------------------
+
+void tgui_handle_poll_allocator_init(TGuiHandlePoolAllocator *allocator)
+{
+    allocator->buffer_size = TGUI_DEFAULT_POOL_SIZE;
+    allocator->buffer = malloc(allocator->buffer_size);
+    allocator->count = 0;
+    allocator->free_list = 0;
+}
+
+TGuiHandle tgui_handle_allocator_pull(TGuiHandlePoolAllocator *allocator)
+{
+    TGuiHandle handle = TGUI_INVALID_HANDLE;
+    if(allocator->free_list)
+    {
+        handle = allocator->free_list->handle;
+        allocator->free_list = allocator->free_list->next;
+        return handle;
+    }
+
+    handle = allocator->count + 1;
+    if(handle >= allocator->buffer_size)
+    {
+        // TODO: this is a dynamic pool allocator and need to be reallocated here!
+        // TODO: recalculete the free list here
+    }
+
+    allocator->count++;
+    return handle;
+}
+
+void tgui_handle_allocator_free(TGuiHandle handle)
+{
+    UNUSED_VAR(handle);
+    // TODO: implement free list for the pool
+}
+
+//-----------------------------------------------------
+//  NOTE: core library functions
+//-----------------------------------------------------
+
 // NOTE: core lib functions
 void tgui_init(TGuiBitmap *backbuffer, TGuiFont *font)
 {
@@ -132,64 +235,9 @@ void tgui_draw_command_buffer(void)
     }
 }
 
-// NOTE: UTILITIES functions
-
-TGuiV2 tgui_v2(f32 x, f32 y)
-{
-    TGuiV2 result;
-    result.x = x;
-    result.y = y;
-    return result;
-}
-
-TGuiV2 tgui_v2_sub(TGuiV2 a, TGuiV2 b)
-{
-    TGuiV2 result = tgui_v2(a.x - b.x, a.y - b.y);
-    return result;
-}
-f32 tgui_v2_dot(TGuiV2 a, TGuiV2 b)
-{
-    f32 result = a.x * b.x + a.y * b.y;
-    return result;
-}
-f32 tgui_v2_lenght_sqrt(TGuiV2 v)
-{
-    f32 result = tgui_v2_dot(v, v);
-    return result;
-}
-f32 tgui_v2_length(TGuiV2 v)
-{
-    f32 result = sqrtf(tgui_v2_lenght_sqrt(v));
-    return result;
-}
-
-TGuiV2 tgui_v2_normalize(TGuiV2 v)
-{
-    TGuiV2 result = {0};
-    result.x = v.x / tgui_v2_length(v);
-    result.y = v.y / tgui_v2_length(v);
-    return result;
-}
-
-TGuiRect tgui_rect_xywh(f32 x, f32 y, f32 width, f32 height)
-{
-    TGuiRect result;
-    result.x = x;
-    result.y = y;
-    result.width = width;
-    result.height = height;
-    return result;
-}
-
-b32 tgui_point_inside_rect(TGuiV2 point, TGuiRect rect)
-{
-    b32 result = point.x >= rect.x && point.x < (rect.x + rect.width) &&
-                 point.y >= rect.y && point.y < (rect.y + rect.height);
-    return result;
-}
-
+//-----------------------------------------------------
 // NOTE: DEBUG functions
-
+//-----------------------------------------------------
 // NOTE: only use in implementation
 typedef struct TGuiBmpHeader
 {
@@ -292,7 +340,9 @@ void tgui_clear_backbuffer(TGuiBitmap *backbuffer)
     memset(backbuffer->pixels, 0, backbuffer_size);
 }
 
+//-----------------------------------------------------
 // NOTE: simple rendering API
+//-----------------------------------------------------
 
 void tgui_draw_rect(TGuiBitmap *backbuffer, i32 min_x, i32 min_y, i32 max_x, i32 max_y, u32 color)
 {

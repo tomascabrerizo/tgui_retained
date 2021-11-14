@@ -132,6 +132,42 @@ typedef struct TGuiEventQueue
     u32 count;
 } TGuiEventQueue;
 
+// NOTE: widget are in a tree 
+typedef u32 TGuiHandle;
+#define TGUI_INVALID_HANDLE 0
+typedef struct TGuiWidget
+{
+    TGuiHandle parent;
+    TGuiHandle child_first;
+    TGuiHandle child_last;
+    TGuiHandle sibling_next;
+    TGuiHandle sibling_prev;
+    
+    TGuiRect dimension;
+    b32 pressed;
+} TGuiWidget;
+
+// TODO: if we use a dynamic pool allocator and the free list need to be updated
+// every time the memory is reallocated
+typedef struct TGuiWidgetFree
+{
+    TGuiHandle handle;
+    struct TGuiWidgetFree *next;
+} TGuiWidgetFree;
+
+#define TGUI_DEFAULT_POOL_SIZE 8
+typedef struct TGuiHandlePoolAllocator
+{
+    TGuiWidget *buffer;
+    u32 buffer_size;
+    u32 count;
+    TGuiWidgetFree *free_list;
+} TGuiHandlePoolAllocator;
+
+void tgui_handle_allocator_init(TGuiHandlePoolAllocator *allocator);
+TGuiHandle tgui_handle_allocator_pull(TGuiHandlePoolAllocator *allocator);
+void tgui_handle_allocator_free(TGuiHandle handle);
+
 typedef struct TGuiState
 {
     TGuiBitmap *backbuffer;
@@ -148,6 +184,10 @@ typedef struct TGuiState
     b32 mouse_up;
     b32 mouse_down;
     b32 mouse_is_down;
+
+    TGuiHandlePoolAllocator handle_allocator;
+    TGuiHandle root;
+    TGuiHandle focus;
 } TGuiState;
 // TODO: Maybe the state should be provided by the application?
 // NOTE: global state (stores all internal state of the GUI)
@@ -160,15 +200,6 @@ TGUI_API void tgui_draw_command_buffer(void);
 TGUI_API void tgui_push_event(TGuiEvent event);
 TGUI_API void tgui_push_draw_command(TGuiDrawCommand draw_cmd);
 TGUI_API b32 tgui_pull_draw_command(TGuiDrawCommand *draw_cmd);
-
-// NOTE: API utilities
-// TODO: make this funtions inline
-TGUI_API TGuiV2 tgui_v2(f32 x, f32 y);
-TGUI_API TGuiV2 tgui_v2_sub(TGuiV2 a, TGuiV2 b);
-TGUI_API f32 tgui_v2_dot(TGuiV2 a, TGuiV2 b);
-TGUI_API f32 tgui_v2_lenght_sqrt(TGuiV2 v);
-TGUI_API f32 tgui_v2_lenght(TGuiV2 v);
-TGUI_API TGuiV2 tgui_v2_normalize(TGuiV2 v);
 
 TGUI_API TGuiRect tgui_rect_xywh(f32 x, f32 y, f32 width, f32 height);
 TGUI_API b32 tgui_point_inside_rect(TGuiV2 point, TGuiRect rect);
