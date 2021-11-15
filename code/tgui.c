@@ -90,6 +90,19 @@ TGuiHandle tgui_create_container(void)
     container->flags = TGUI_CONTAINER | TGUI_FOCUSABLE;
     container->dimension = tgui_rect_xywh(20, 20, 200, 400);
     container->pressed = false;
+    
+    TGuiState *state = &tgui_global_state;
+    if(!state->root)
+    {
+        state->root = handle;
+    }
+    else
+    {
+        TGuiWidget *root = tgui_widget_get(state->root);
+        container->sibling_next = root->handle;
+        root->sibling_prev = handle;
+        state->root = handle;
+    }
     return handle;
 }
 
@@ -106,7 +119,13 @@ TGuiHandle tgui_create_button(void)
 void tgui_container_add_widget(TGuiHandle container_handle, TGuiHandle widget_handle)
 {
     TGuiWidget *container = tgui_widget_get(container_handle);
+    ASSERT(container->flags & TGUI_CONTAINER);
     TGuiWidget *widget = tgui_widget_get(widget_handle);
+    
+    // TODO: all widgets will be overlapping in 0, 0 parent coord (fix it)
+    widget->dimension.x = container->dimension.x;
+    widget->dimension.y = container->dimension.y;
+
     if(!container->child_last)
     {
         container->child_last = widget_handle;
@@ -119,6 +138,47 @@ void tgui_container_add_widget(TGuiHandle container_handle, TGuiHandle widget_ha
     }
     widget->sibling_next = container->child_first; 
     container->child_first = widget_handle;
+}
+
+void tgui_widget_update(TGuiHandle handle)
+{
+    TGuiState *state = &tgui_global_state;
+    TGuiWidget *widget = tgui_widget_get(handle);
+    if(widget->flags & TGUI_CONTAINER)
+    {
+    }
+    if(widget->flags & TGUI_FOCUSABLE)
+    {
+        TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y);
+        if(tgui_point_inside_rect(mouse, widget->dimension))
+        {
+            state->focus = widget->handle;
+        }
+    }
+    if(widget->flags & TGUI_CLICKABLE)
+    {
+        if((state->focus == widget->handle) && state->mouse_up)
+        {
+            TGuiEventButton button_evet = {0};
+            button_evet.type = TGUI_EVEN_BUTTON;
+            button_evet.handle = widget->handle;
+            tgui_push_event((TGuiEvent)button_evet);
+        }
+    }
+}
+
+void tgui_widget_recursive_desent(TGuiHandle handle, TGuiWidgetFP function)
+{
+    TGuiWidget *widget = tgui_widget_get(handle);
+    while(widget)
+    {
+        function(widget->handle);
+        if(widget->child_first)
+        {
+            tgui_widget_recursive_desent(widget->child_first, function);
+        }
+        widget = tgui_widget_get(widget->sibling_next);
+    }
 }
 
 //-----------------------------------------------------
@@ -177,26 +237,18 @@ void tgui_widget_set(TGuiHandle handle, TGuiWidget widget)
 
 TGuiWidget *tgui_widget_get(TGuiHandle handle)
 {
-    ASSERT(handle != TGUI_INVALID_HANDLE);
-    TGuiState *state = &tgui_global_state;
-    return state->widget_allocator.buffer + handle;
+    TGuiWidget *result = 0;
+    if(handle != TGUI_INVALID_HANDLE)
+    {
+        TGuiState *state = &tgui_global_state;
+        result = state->widget_allocator.buffer + handle;
+    }
+    return result;
 }
 
 //-----------------------------------------------------
 //  NOTE: core library functions
 //-----------------------------------------------------
-
-// NOTE: core lib functions
-void tgui_init(TGuiBitmap *backbuffer, TGuiFont *font)
-{
-    TGuiState *state = &tgui_global_state;
-    
-    memset(state, 0, sizeof(TGuiState));
-    state->backbuffer = backbuffer;
-    state->font = font;
-    state->font_height = 9;
-    tgui_widget_poll_allocator_init(&state->widget_allocator);
-}
 
 void tgui_push_event(TGuiEvent event)
 {
@@ -226,6 +278,18 @@ b32 tgui_pull_draw_command(TGuiDrawCommand *draw_cmd)
     }
     *draw_cmd = state->draw_command_buffer.buffer[state->draw_command_buffer.head++];
     return true;
+}
+
+// NOTE: core lib functions
+void tgui_init(TGuiBitmap *backbuffer, TGuiFont *font)
+{
+    TGuiState *state = &tgui_global_state;
+    
+    memset(state, 0, sizeof(TGuiState));
+    state->backbuffer = backbuffer;
+    state->font = font;
+    state->font_height = 9;
+    tgui_widget_poll_allocator_init(&state->widget_allocator);
 }
 
 void tgui_update(void)
@@ -273,6 +337,9 @@ void tgui_update(void)
         }
     }
     state->event_queue.count = 0;
+    
+    // NOTE: update all widget in the state widget tree
+    tgui_widget_recursive_desent(state->root, tgui_widget_update);
 }
 
 void tgui_draw_command_buffer(void)

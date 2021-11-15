@@ -33,6 +33,10 @@ typedef double f64;
 #define TGUI_GREY   0xFF8896AB
 #define TGUI_GREEN  0xFFC4EBC8
 
+// NOTE: handle to GUI widgets
+typedef u32 TGuiHandle;
+#define TGUI_INVALID_HANDLE 0
+
 typedef struct TGuiV2
 {
     f32 x;
@@ -75,6 +79,11 @@ typedef struct TGuiFont
 
 typedef enum TGuiEventType
 {
+    // NOTE: GUI events
+    TGUI_EVEN_BUTTON,
+    TGUI_EVEN_FOCUS,
+
+    // NOTE: externals events
     TGUI_EVENT_MOUSEMOVE,
     TGUI_EVENT_MOUSEDOWN,
     TGUI_EVENT_MOUSEUP,
@@ -83,6 +92,18 @@ typedef enum TGuiEventType
 
     TGUI_EVENT_COUNT,
 } TGuiEventType;
+
+typedef struct TGuiEventButton
+{
+    TGuiEventType type;
+    TGuiHandle handle;
+} TGuiEventButton;
+
+typedef struct TGuiEventFocus
+{
+    TGuiEventType type;
+    TGuiHandle handle;
+} TGuiEventFocus;
 
 typedef struct TGuiEventMouseMove
 {
@@ -94,8 +115,21 @@ typedef struct TGuiEventMouseMove
 typedef union TGuiEvent
 {
     TGuiEventType type;
+    
+    // NOTE: GUI events
+    TGuiEventButton button;
+    TGuiEventFocus focus;
+    
+    // NOTE: externals events
     TGuiEventMouseMove mouse;
 } TGuiEvent;
+
+#define TGUI_EVENT_QUEUE_MAX 128
+typedef struct TGuiEventQueue
+{
+    TGuiEvent queue[TGUI_EVENT_QUEUE_MAX];
+    u32 count;
+} TGuiEventQueue;
 
 typedef enum TGuiDrawCommandType
 {
@@ -125,22 +159,12 @@ typedef struct TGuiDrawCommandBuffer
     u32 count;
 } TGuiDrawCommandBuffer;
 
-#define TGUI_EVENT_QUEUE_MAX 128
-typedef struct TGuiEventQueue
-{
-    TGuiEvent queue[TGUI_EVENT_QUEUE_MAX];
-    u32 count;
-} TGuiEventQueue;
-
 typedef enum TGuiWidgetFlag
 {
     TGUI_CONTAINER = 1 << 0,
     TGUI_FOCUSABLE = 1 << 1,
     TGUI_CLICKABLE = 1 << 2,
 } TGuiWidgetFlag;
-
-typedef u32 TGuiHandle;
-#define TGUI_INVALID_HANDLE 0
 
 typedef struct TGuiWidget
 {
@@ -193,7 +217,8 @@ typedef struct TGuiState
     b32 mouse_is_down;
 
     TGuiWidgetPoolAllocator widget_allocator;
-    TGuiHandle on_top;
+    TGuiHandle focus;
+    TGuiHandle root;
 } TGuiState;
 // TODO: Maybe the state should be provided by the application?
 // NOTE: global state (stores all internal state of the GUI)
@@ -202,9 +227,14 @@ extern TGuiState tgui_global_state;
 //-----------------------------------------------------
 // NOTE: GUI lib functions
 //-----------------------------------------------------
+
+typedef void (*TGuiWidgetFP)(TGuiHandle handle);
+
 TGUI_API TGuiHandle tgui_create_container(void);
 TGUI_API TGuiHandle tgui_create_button(void);
 TGUI_API void tgui_container_add_widget(TGuiHandle container_handle, TGuiHandle widget_handle);
+void tgui_widget_update(TGuiHandle handle);
+void tgui_widget_recursive_desent(TGuiHandle handle, TGuiWidgetFP function);
 
 //-----------------------------------------------------
 // NOTE: core lib functions
