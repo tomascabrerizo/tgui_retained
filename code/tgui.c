@@ -70,10 +70,62 @@ static b32 tgui_point_inside_rect(TGuiV2 point, TGuiRect rect)
 }
 
 //-----------------------------------------------------
+// NOTE: GUI lib functions
+//-----------------------------------------------------
+
+static inline TGuiWidget *tgui_create_widget(TGuiHandle *handle)
+{
+    TGuiState *state = &tgui_global_state;
+    *handle = tgui_widget_allocator_alloc(&state->widget_allocator);
+    TGuiWidget *widget = tgui_widget_get(*handle);
+    memset(widget, 0, sizeof(TGuiWidget));
+    widget->handle = *handle;
+    return widget;
+}
+
+TGuiHandle tgui_create_container(void)
+{
+    TGuiHandle handle = TGUI_INVALID_HANDLE;
+    TGuiWidget *container = tgui_create_widget(&handle); 
+    container->flags = TGUI_CONTAINER | TGUI_FOCUSABLE;
+    container->dimension = tgui_rect_xywh(20, 20, 200, 400);
+    container->pressed = false;
+    return handle;
+}
+
+TGuiHandle tgui_create_button(void)
+{
+    TGuiHandle handle = TGUI_INVALID_HANDLE;
+    TGuiWidget *button = tgui_create_widget(&handle); 
+    button->flags = TGUI_FOCUSABLE | TGUI_CLICKABLE;
+    button->dimension = tgui_rect_xywh(0, 0, 100, 50);
+    button->pressed = false;
+    return handle;
+}
+
+void tgui_container_add_widget(TGuiHandle container_handle, TGuiHandle widget_handle)
+{
+    TGuiWidget *container = tgui_widget_get(container_handle);
+    TGuiWidget *widget = tgui_widget_get(widget_handle);
+    if(!container->child_last)
+    {
+        container->child_last = widget_handle;
+    }
+    widget->parent = container_handle; 
+    if(container->child_first)
+    {
+        TGuiWidget *old_first_child = tgui_widget_get(container->child_first);
+        old_first_child->sibling_prev = widget_handle; 
+    }
+    widget->sibling_next = container->child_first; 
+    container->child_first = widget_handle;
+}
+
+//-----------------------------------------------------
 //  NOTE: memory management functions
 //-----------------------------------------------------
 
-void tgui_handle_poll_allocator_init(TGuiWidgetPoolAllocator *allocator)
+void tgui_widget_poll_allocator_init(TGuiWidgetPoolAllocator *allocator)
 {
     allocator->buffer_size = TGUI_DEFAULT_POOL_SIZE;
     allocator->buffer = (TGuiWidget *)malloc(allocator->buffer_size*sizeof(TGuiWidget));
@@ -82,7 +134,7 @@ void tgui_handle_poll_allocator_init(TGuiWidgetPoolAllocator *allocator)
     allocator->free_list = 0;
 }
 
-TGuiHandle tgui_handle_allocator_pull(TGuiWidgetPoolAllocator *allocator)
+TGuiHandle tgui_widget_allocator_alloc(TGuiWidgetPoolAllocator *allocator)
 {
     TGuiHandle handle = TGUI_INVALID_HANDLE;
     if(allocator->free_list)
@@ -99,23 +151,6 @@ TGuiHandle tgui_handle_allocator_pull(TGuiWidgetPoolAllocator *allocator)
         u32 new_buffer_size = allocator->buffer_size * 2;
         TGuiWidget *new_buffer = (TGuiWidget *)malloc(new_buffer_size*sizeof(TGuiWidget));
         memcpy(new_buffer, allocator->buffer, allocator->buffer_size*sizeof(TGuiWidget));
-
-        // NOTE: realloc the free list here
-        if(allocator->free_list)
-        {
-            TGuiWidgetFree *free_widget = allocator->free_list;
-            while(free_widget)
-            {
-                TGuiWidgetFree *new_free = (TGuiWidgetFree *)(new_buffer + free_widget->handle);
-                new_free->handle = free_widget->handle;
-                if(free_widget->next)
-                {
-                    new_free->next = (TGuiWidgetFree *)(new_buffer + free_widget->next->handle);
-                }
-                free_widget = free_widget->next;
-            }
-            allocator->free_list = (TGuiWidgetFree *)(new_buffer + allocator->free_list->handle);
-        }
         free(allocator->buffer);
         allocator->buffer = new_buffer;
         allocator->buffer_size = new_buffer_size;
@@ -123,20 +158,28 @@ TGuiHandle tgui_handle_allocator_pull(TGuiWidgetPoolAllocator *allocator)
     return handle;
 }
 
-void tgui_handle_allocator_free(TGuiWidgetPoolAllocator *allocator, TGuiHandle handle)
+void tgui_widget_allocator_free(TGuiWidgetPoolAllocator *allocator, TGuiHandle *handle)
 {
-    ASSERT(handle != TGUI_INVALID_HANDLE);
-    TGuiWidgetFree *free_widget = (TGuiWidgetFree *)(allocator->buffer + handle);
-    free_widget->handle = handle;
+    ASSERT(*handle != TGUI_INVALID_HANDLE);
+    TGuiWidgetFree *free_widget = (TGuiWidgetFree *)(allocator->buffer + *handle);
+    free_widget->handle = *handle;
     free_widget->next = allocator->free_list;
     allocator->free_list = free_widget;
+    *handle = TGUI_INVALID_HANDLE;
 }
 
 void tgui_widget_set(TGuiHandle handle, TGuiWidget widget)
 {
     ASSERT(handle != TGUI_INVALID_HANDLE);
     TGuiState *state = &tgui_global_state;
-    state->handle_allocator.buffer[handle] = widget;
+    state->widget_allocator.buffer[handle] = widget;
+}
+
+TGuiWidget *tgui_widget_get(TGuiHandle handle)
+{
+    ASSERT(handle != TGUI_INVALID_HANDLE);
+    TGuiState *state = &tgui_global_state;
+    return state->widget_allocator.buffer + handle;
 }
 
 //-----------------------------------------------------
@@ -152,7 +195,7 @@ void tgui_init(TGuiBitmap *backbuffer, TGuiFont *font)
     state->backbuffer = backbuffer;
     state->font = font;
     state->font_height = 9;
-    tgui_handle_poll_allocator_init(&state->handle_allocator);
+    tgui_widget_poll_allocator_init(&state->widget_allocator);
 }
 
 void tgui_push_event(TGuiEvent event)
@@ -305,17 +348,17 @@ TGuiBitmap tgui_debug_load_bmp(char *path)
         
         void *temp_bmp_data = bmp_data;
         TGuiBmpHeader bmp_header = {0};
-        bmp_header.id = READ_U16(temp_bmp_data);
-        bmp_header.file_size = READ_U32(temp_bmp_data);
-        bmp_header.reserved = READ_U32(temp_bmp_data);
+        bmp_header.id =                 READ_U16(temp_bmp_data);
+        bmp_header.file_size =          READ_U32(temp_bmp_data);
+        bmp_header.reserved =           READ_U32(temp_bmp_data);
         bmp_header.pixel_array_offset = READ_U32(temp_bmp_data);
-        bmp_header.dib_header_size = READ_U32(temp_bmp_data);
-        bmp_header.width = READ_U32(temp_bmp_data);
-        bmp_header.height = READ_U32(temp_bmp_data);
-        bmp_header.planes = READ_U16(temp_bmp_data);
-        bmp_header.bits_per_pixel = READ_U16(temp_bmp_data);
-        bmp_header.compression = READ_U32(temp_bmp_data);
-        bmp_header.bmp_size = READ_U32(temp_bmp_data);
+        bmp_header.dib_header_size =    READ_U32(temp_bmp_data);
+        bmp_header.width =              READ_U32(temp_bmp_data);
+        bmp_header.height =             READ_U32(temp_bmp_data);
+        bmp_header.planes =             READ_U16(temp_bmp_data);
+        bmp_header.bits_per_pixel =     READ_U16(temp_bmp_data);
+        bmp_header.compression =        READ_U32(temp_bmp_data);
+        bmp_header.bmp_size =           READ_U32(temp_bmp_data);
     
         // NOTE: for now only allow 32bits bitmaps
         u32 bytes_per_pixel = bmp_header.bits_per_pixel / 8;

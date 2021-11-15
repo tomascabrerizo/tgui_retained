@@ -144,7 +144,13 @@ int main(int argc, char** argv)
     
     // NOTE: init TGUI lib
     tgui_init(&tgui_backbuffer, &test_font);
-    
+
+    TGuiHandle container = tgui_create_container();
+    TGuiHandle button1 = tgui_create_button();
+    TGuiHandle button2 = tgui_create_button();
+    tgui_container_add_widget(container, button1);
+    tgui_container_add_widget(container, button2);
+
     while(global_running)
     {
         LARGE_INTEGER large_current_time;

@@ -132,17 +132,28 @@ typedef struct TGuiEventQueue
     u32 count;
 } TGuiEventQueue;
 
-// NOTE: widget are in a tree 
+typedef enum TGuiWidgetFlag
+{
+    TGUI_CONTAINER = 1 << 0,
+    TGUI_FOCUSABLE = 1 << 1,
+    TGUI_CLICKABLE = 1 << 2,
+} TGuiWidgetFlag;
+
 typedef u32 TGuiHandle;
 #define TGUI_INVALID_HANDLE 0
+
 typedef struct TGuiWidget
 {
+    TGuiHandle handle;
+
+    // NOTE: widget are in a tree 
     TGuiHandle parent;
     TGuiHandle child_first;
     TGuiHandle child_last;
     TGuiHandle sibling_next;
     TGuiHandle sibling_prev;
     
+    TGuiWidgetFlag flags;
     TGuiRect dimension;
     b32 pressed;
 } TGuiWidget;
@@ -164,12 +175,6 @@ typedef struct TGuiWidgetPoolAllocator
     TGuiWidgetFree *free_list;
 } TGuiWidgetPoolAllocator;
 
-// TODO: maybe this function should use the global state allocator
-void tgui_handle_allocator_init(TGuiWidgetPoolAllocator *allocator);
-TGuiHandle tgui_handle_allocator_pull(TGuiWidgetPoolAllocator *allocator);
-void tgui_handle_allocator_free(TGuiWidgetPoolAllocator *allocator, TGuiHandle handle);
-void tgui_widget_set(TGuiHandle handle, TGuiWidget widget);
-
 typedef struct TGuiState
 {
     TGuiBitmap *backbuffer;
@@ -187,15 +192,23 @@ typedef struct TGuiState
     b32 mouse_down;
     b32 mouse_is_down;
 
-    TGuiWidgetPoolAllocator handle_allocator;
-    TGuiHandle root;
-    TGuiHandle focus;
+    TGuiWidgetPoolAllocator widget_allocator;
+    TGuiHandle on_top;
 } TGuiState;
 // TODO: Maybe the state should be provided by the application?
 // NOTE: global state (stores all internal state of the GUI)
 extern TGuiState tgui_global_state;
 
+//-----------------------------------------------------
+// NOTE: GUI lib functions
+//-----------------------------------------------------
+TGUI_API TGuiHandle tgui_create_container(void);
+TGUI_API TGuiHandle tgui_create_button(void);
+TGUI_API void tgui_container_add_widget(TGuiHandle container_handle, TGuiHandle widget_handle);
+
+//-----------------------------------------------------
 // NOTE: core lib functions
+//-----------------------------------------------------
 TGUI_API void tgui_init(TGuiBitmap *backbuffer, TGuiFont *font);
 TGUI_API void tgui_update(void);
 TGUI_API void tgui_draw_command_buffer(void);
@@ -203,14 +216,27 @@ TGUI_API void tgui_push_event(TGuiEvent event);
 TGUI_API void tgui_push_draw_command(TGuiDrawCommand draw_cmd);
 TGUI_API b32 tgui_pull_draw_command(TGuiDrawCommand *draw_cmd);
 
+//-----------------------------------------------------
+//  NOTE: memory management functions
+//-----------------------------------------------------
+void tgui_widget_allocator_init(TGuiWidgetPoolAllocator *allocator);
+TGuiHandle tgui_widget_allocator_alloc(TGuiWidgetPoolAllocator *allocator);
+void tgui_widget_allocator_free(TGuiWidgetPoolAllocator *allocator, TGuiHandle *handle);
+void tgui_widget_set(TGuiHandle handle, TGuiWidget widget);
+TGuiWidget *tgui_widget_get(TGuiHandle handle);
+
 TGUI_API TGuiRect tgui_rect_xywh(f32 x, f32 y, f32 width, f32 height);
 TGUI_API b32 tgui_point_inside_rect(TGuiV2 point, TGuiRect rect);
 
+//-----------------------------------------------------
 // NOTE: DEBUG function
+//-----------------------------------------------------
 TGuiBitmap tgui_debug_load_bmp(char *path);
 void tgui_debug_free_bmp(TGuiBitmap *bitmap);
 
+//-----------------------------------------------------
 // NOTE: simple render API function
+//-----------------------------------------------------
 TGUI_API void tgui_clear_backbuffer(TGuiBitmap *backbuffer);
 TGUI_API void tgui_draw_circle_aa(TGuiBitmap *backbuffer, i32 x, i32 y, u32 color, u32 radius);
 TGUI_API void tgui_draw_rect(TGuiBitmap *backbuffer, i32 min_x, i32 min_y, i32 max_x, i32 max_y, u32 color);
