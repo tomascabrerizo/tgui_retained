@@ -194,7 +194,7 @@ int main(int argc, char** argv)
         tgui_draw_command_buffer();
         
         tgui_draw_rounded_rect(&tgui_backbuffer, 80, 100, 280, 400, TGUI_GREEN, 25);
-        tgui_draw_circle_aa(&tgui_backbuffer, 400, 300, TGUI_ORANGE, 10);
+        tgui_draw_circle_aa(&tgui_backbuffer, 400, 300, TGUI_ORANGE, 100);
 
         // NOTE: Blt the backbuffer on to the destination window
         BitBlt(global_device_context, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, global_backbuffer_dc, 0, 0, SRCCOPY);

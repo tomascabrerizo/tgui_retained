@@ -156,18 +156,18 @@ typedef struct TGuiWidgetFree
 } TGuiWidgetFree;
 
 #define TGUI_DEFAULT_POOL_SIZE 8
-typedef struct TGuiHandlePoolAllocator
+typedef struct TGuiWidgetPoolAllocator
 {
     TGuiWidget *buffer;
     u32 buffer_size;
     u32 count;
     TGuiWidgetFree *free_list;
-} TGuiHandlePoolAllocator;
+} TGuiWidgetPoolAllocator;
 
 // TODO: maybe this function should use the global state allocator
-void tgui_handle_allocator_init(TGuiHandlePoolAllocator *allocator);
-TGuiHandle tgui_handle_allocator_pull(TGuiHandlePoolAllocator *allocator);
-void tgui_handle_allocator_free(TGuiHandlePoolAllocator *allocator, TGuiHandle handle);
+void tgui_handle_allocator_init(TGuiWidgetPoolAllocator *allocator);
+TGuiHandle tgui_handle_allocator_pull(TGuiWidgetPoolAllocator *allocator);
+void tgui_handle_allocator_free(TGuiWidgetPoolAllocator *allocator, TGuiHandle handle);
 void tgui_widget_set(TGuiHandle handle, TGuiWidget widget);
 
 typedef struct TGuiState
@@ -187,7 +187,7 @@ typedef struct TGuiState
     b32 mouse_down;
     b32 mouse_is_down;
 
-    TGuiHandlePoolAllocator handle_allocator;
+    TGuiWidgetPoolAllocator handle_allocator;
     TGuiHandle root;
     TGuiHandle focus;
 } TGuiState;

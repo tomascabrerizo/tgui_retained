@@ -73,7 +73,7 @@ static b32 tgui_point_inside_rect(TGuiV2 point, TGuiRect rect)
 //  NOTE: memory management functions
 //-----------------------------------------------------
 
-void tgui_handle_poll_allocator_init(TGuiHandlePoolAllocator *allocator)
+void tgui_handle_poll_allocator_init(TGuiWidgetPoolAllocator *allocator)
 {
     allocator->buffer_size = TGUI_DEFAULT_POOL_SIZE;
     allocator->buffer = (TGuiWidget *)malloc(allocator->buffer_size*sizeof(TGuiWidget));
@@ -82,7 +82,7 @@ void tgui_handle_poll_allocator_init(TGuiHandlePoolAllocator *allocator)
     allocator->free_list = 0;
 }
 
-TGuiHandle tgui_handle_allocator_pull(TGuiHandlePoolAllocator *allocator)
+TGuiHandle tgui_handle_allocator_pull(TGuiWidgetPoolAllocator *allocator)
 {
     TGuiHandle handle = TGUI_INVALID_HANDLE;
     if(allocator->free_list)
@@ -123,14 +123,13 @@ TGuiHandle tgui_handle_allocator_pull(TGuiHandlePoolAllocator *allocator)
     return handle;
 }
 
-void tgui_handle_allocator_free(TGuiHandlePoolAllocator *allocator, TGuiHandle handle)
+void tgui_handle_allocator_free(TGuiWidgetPoolAllocator *allocator, TGuiHandle handle)
 {
     ASSERT(handle != TGUI_INVALID_HANDLE);
-    TGuiWidgetFree *free_widget = allocator->free_list;
-    while(free_widget) free_widget = free_widget->next;
-    free_widget = (TGuiWidgetFree *)(allocator->buffer + handle);
+    TGuiWidgetFree *free_widget = (TGuiWidgetFree *)(allocator->buffer + handle);
     free_widget->handle = handle;
-    free_widget->next = 0;
+    free_widget->next = allocator->free_list;
+    allocator->free_list = free_widget;
 }
 
 void tgui_widget_set(TGuiHandle handle, TGuiWidget widget)
