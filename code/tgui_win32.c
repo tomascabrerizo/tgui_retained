@@ -146,8 +146,8 @@ int main(int argc, char** argv)
     tgui_init(&tgui_backbuffer, &test_font);
 
     TGuiHandle container = tgui_create_container();
-    TGuiHandle button1 = tgui_create_button();
-    TGuiHandle button2 = tgui_create_button();
+    TGuiHandle button1 = tgui_create_button("button 1");
+    TGuiHandle button2 = tgui_create_button("button 2");
     tgui_container_add_widget(container, button1);
     tgui_container_add_widget(container, button2);
 
@@ -199,7 +199,8 @@ int main(int argc, char** argv)
         
         tgui_draw_command_buffer();
         
-        tgui_draw_rounded_rect(&tgui_backbuffer, 80, 100, 280, 400, TGUI_GREEN, 25);
+        // TODO: create draw command for rounded rect and circle
+        //tgui_draw_rounded_rect(&tgui_backbuffer, 100, 100, 280, 400, TGUI_GREEN, 25);
         tgui_draw_circle_aa(&tgui_backbuffer, 400, 300, TGUI_ORANGE, 100);
 
         // NOTE: Blt the backbuffer on to the destination window

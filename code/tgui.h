@@ -159,12 +159,26 @@ typedef struct TGuiDrawCommandBuffer
     u32 count;
 } TGuiDrawCommandBuffer;
 
+// NOTE: type are use for render style
+typedef enum TGuiWidgetType
+{
+    TGUI_CONTAINER,
+    TGUI_BUTTON,
+    
+    TGUI_COUNT,
+} TGuiWidgetType;
+
+// NOTE: type are use for update the widget 
 typedef enum TGuiWidgetFlag
 {
-    TGUI_CONTAINER = 1 << 0,
-    TGUI_FOCUSABLE = 1 << 1,
-    TGUI_CLICKABLE = 1 << 2,
+    TGUI_FOCUSABLE = 1 << 0,
+    TGUI_CLICKABLE = 1 << 1,
 } TGuiWidgetFlag;
+
+typedef struct TGuiWidgetLayout
+{
+    u32 padding;
+} TGuiWidgetLayout;
 
 typedef struct TGuiWidget
 {
@@ -177,9 +191,12 @@ typedef struct TGuiWidget
     TGuiHandle sibling_next;
     TGuiHandle sibling_prev;
     
+    TGuiWidgetType type;
     TGuiWidgetFlag flags;
+    TGuiWidgetLayout layout;
     TGuiRect dimension;
-    b32 pressed;
+    TGuiV2 text_dim;
+    char *text;
 } TGuiWidget;
 
 // TODO: if we use a dynamic pool allocator and the free list need to be updated
@@ -231,10 +248,12 @@ extern TGuiState tgui_global_state;
 typedef void (*TGuiWidgetFP)(TGuiHandle handle);
 
 TGUI_API TGuiHandle tgui_create_container(void);
-TGUI_API TGuiHandle tgui_create_button(void);
+TGUI_API TGuiHandle tgui_create_button(char *label);
 TGUI_API void tgui_container_add_widget(TGuiHandle container_handle, TGuiHandle widget_handle);
 void tgui_widget_update(TGuiHandle handle);
-void tgui_widget_recursive_desent(TGuiHandle handle, TGuiWidgetFP function);
+void tgui_widget_render(TGuiHandle handle);
+void tgui_widget_recursive_descent(TGuiHandle handle, TGuiWidgetFP function);
+TGuiRect tgui_widget_abs_pos(TGuiHandle handle);
 
 //-----------------------------------------------------
 // NOTE: core lib functions
@@ -280,6 +299,6 @@ TGUI_API void tgui_draw_src_dest_bitmap(TGuiBitmap *backbuffer, TGuiBitmap *bitm
 TGUI_API TGuiFont tgui_create_font(TGuiBitmap *bitmap, u32 char_width, u32 char_height, u32 num_rows, u32 num_cols);
 TGUI_API void tgui_draw_char(TGuiBitmap *backbuffer, TGuiFont *font, u32 height, i32 x, i32 y, char character);
 TGUI_API void tgui_draw_text(TGuiBitmap *backbuffer, TGuiFont *font, u32 height, i32 x, i32 y, char *text);
-TGUI_API u32 tgui_get_text_width(TGuiFont *font, char *text, u32 height);
+TGUI_API u32 tgui_text_get_width(TGuiFont *font, char *text, u32 height);
 
 #endif // TGUI_WIN32_H
