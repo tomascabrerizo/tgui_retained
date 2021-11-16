@@ -145,11 +145,44 @@ int main(int argc, char** argv)
     // NOTE: init TGUI lib
     tgui_init(&tgui_backbuffer, &test_font);
 
-    TGuiHandle container = tgui_create_container();
+    TGuiHandle container = tgui_create_container(TGUI_LAYOUT_HORIZONTAL, true, 20);
+    tgui_widget_to_root(container);
+
+    TGuiHandle column1 = tgui_create_container(TGUI_LAYOUT_VERTICAL, false, 5);
+    TGuiHandle column2 = tgui_create_container(TGUI_LAYOUT_VERTICAL, false, 5);
+    TGuiHandle column3 = tgui_create_container(TGUI_LAYOUT_VERTICAL, false, 5);
+
+    TGuiHandle box1 = tgui_create_checkbox("box 0");
+    TGuiHandle box2 = tgui_create_checkbox("box 1");
+    TGuiHandle box3 = tgui_create_checkbox("box 2");
+    
+    tgui_container_add_widget(container, column2);
+    tgui_container_add_widget(container, column1);
+    tgui_container_add_widget(container, column3);
+    
+    tgui_container_add_widget(column3, box1);
+    tgui_container_add_widget(column3, box2);
+    tgui_container_add_widget(column3, box3);
+
     TGuiHandle button1 = tgui_create_button("button 1");
     TGuiHandle button2 = tgui_create_button("button 2");
-    tgui_container_add_widget(container, button1);
-    tgui_container_add_widget(container, button2);
+    TGuiHandle checkbox2 = tgui_create_checkbox("checkbox 2");
+    TGuiHandle checkbox1 = tgui_create_checkbox("checkbox 1");
+    
+    tgui_container_add_widget(column1, button1);
+    tgui_container_add_widget(column1, checkbox1);
+    tgui_container_add_widget(column1, button2);
+    tgui_container_add_widget(column1, checkbox2);
+    
+
+    #define BUTTONS_COUNT 8
+    TGuiHandle buttons[BUTTONS_COUNT];
+    for(i32 i = 0; i < BUTTONS_COUNT; ++i)
+    {
+        buttons[i] = tgui_create_button("button");
+        tgui_container_add_widget(column2, buttons[i]);
+    }
+    
 
     while(global_running)
     {
@@ -199,10 +232,6 @@ int main(int argc, char** argv)
         
         tgui_draw_command_buffer();
         
-        // TODO: create draw command for rounded rect and circle
-        //tgui_draw_rounded_rect(&tgui_backbuffer, 100, 100, 280, 400, TGUI_GREEN, 25);
-        tgui_draw_circle_aa(&tgui_backbuffer, 400, 300, TGUI_ORANGE, 100);
-
         // NOTE: Blt the backbuffer on to the destination window
         BitBlt(global_device_context, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, global_backbuffer_dc, 0, 0, SRCCOPY);
     }

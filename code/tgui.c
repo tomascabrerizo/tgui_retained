@@ -92,31 +92,30 @@ static inline TGuiWidget *tgui_create_widget(TGuiHandle *handle)
     TGuiWidget *widget = tgui_widget_get(*handle);
     memset(widget, 0, sizeof(TGuiWidget));
     widget->handle = *handle;
+    widget->visible = true;
     return widget;
 }
 
-TGuiHandle tgui_create_container(void)
+static inline void tgui_widget_set_text(TGuiWidget *widget, char *text)
+{
+    TGuiState *state = &tgui_global_state;
+    widget->text = text;
+    widget->text_dim.y = state->font_height;
+    widget->text_dim.x = tgui_text_get_width(state->font, text, state->font_height);
+}
+
+TGuiHandle tgui_create_container(TGuiLayoutType type, b32 visible, u32 padding)
 {
     TGuiHandle handle = TGUI_INVALID_HANDLE;
     TGuiWidget *container = tgui_create_widget(&handle); 
     
     container->type = TGUI_CONTAINER;
     container->flags = TGUI_CONTAINER | TGUI_FOCUSABLE;
-    container->layout.padding = 20;
-    container->dimension = tgui_rect_xywh(40, 40, 0, container->layout.padding);
+    container->layout.type = type;
+    container->layout.padding = padding;
+    container->dimension = tgui_rect_xywh(40, 40, 0, 0);
+    container->visible = visible;
     
-    TGuiState *state = &tgui_global_state;
-    if(!state->root)
-    {
-        state->root = handle;
-    }
-    else
-    {
-        TGuiWidget *root = tgui_widget_get(state->root);
-        container->sibling_next = root->handle;
-        root->sibling_prev = handle;
-        state->root = handle;
-    }
     return handle;
 }
 
@@ -127,13 +126,123 @@ TGuiHandle tgui_create_button(char *label)
     
     button->type = TGUI_BUTTON;
     button->flags = TGUI_FOCUSABLE | TGUI_CLICKABLE;
-    button->dimension = tgui_rect_xywh(0, 0, 100, 50);
-    button->text = label;
+    button->dimension = tgui_rect_xywh(0, 0, 100, 30);
+    tgui_widget_set_text(button, label);
     
-    TGuiState *state = &tgui_global_state;
-    button->text_dim.y = state->font_height;
-    button->text_dim.x = tgui_text_get_width(state->font, label, state->font_height);
     return handle;
+}
+
+TGuiHandle tgui_create_checkbox(char *label)
+{
+    TGuiHandle handle = TGUI_INVALID_HANDLE;
+    TGuiWidget *checkbox = tgui_create_widget(&handle); 
+    checkbox->type = TGUI_CHECKBOX;
+    checkbox->flags = TGUI_FOCUSABLE | TGUI_CHECKABLE;
+    checkbox->dimension = tgui_rect_xywh(0, 0, 20, 20);
+    tgui_widget_set_text(checkbox, label);
+    
+    return handle;
+}
+
+static void tgui_container_set_container_total_size(TGuiWidget *container, TGuiWidget *widget)
+{
+    // NOTE: resize the container
+    TGuiV2 total_container_size = tgui_v2(0, 0);
+    u32 num_child = 0;
+    while(widget)
+    {
+        switch(container->layout.type)
+        {
+            case TGUI_LAYOUT_VERTICAL:
+            {
+                if(widget->dimension.width > total_container_size.x)
+                {
+                    total_container_size.x = widget->dimension.width;
+                }
+                total_container_size.y += widget->dimension.height;
+            } break;
+            case TGUI_LAYOUT_HORIZONTAL:
+            {
+                if(widget->dimension.height > total_container_size.y)
+                {
+                    total_container_size.y = widget->dimension.height;
+                }
+                total_container_size.x += widget->dimension.width;
+            } break;
+            case TGUI_LAYOUT_COUNT:
+            {
+                ASSERT(!"invalid code path");
+            } break;
+        }
+        ++num_child;
+        widget = tgui_widget_get(widget->sibling_next);
+    }
+    // NOTE: add the container last padding
+    switch(container->layout.type)
+    {
+        case TGUI_LAYOUT_VERTICAL:
+        {
+            total_container_size.x += container->layout.padding*2;
+            total_container_size.y += container->layout.padding*(num_child+1);
+        } break;
+        case TGUI_LAYOUT_HORIZONTAL:
+        {
+            total_container_size.x += container->layout.padding*(num_child+1);
+            total_container_size.y += container->layout.padding*2;
+        } break;
+        case TGUI_LAYOUT_COUNT:
+        {
+            ASSERT(!"invalid code path");
+        } break;
+    }
+    
+    container->dimension.dim = total_container_size;
+}
+
+static void tgui_container_recalculate_dimension(TGuiWidget *container)
+{
+    while(container)
+    {
+        TGuiWidget *first_child = tgui_widget_get(container->child_first);
+        if(first_child)
+        {
+            tgui_container_set_container_total_size(container, first_child);
+        }
+        container = tgui_widget_get(container->parent);
+    }
+}
+
+static void tgui_container_set_recalculate_childs_position(TGuiWidget *container, TGuiWidget *widget)
+{
+    while(widget)
+    {
+        TGuiWidget *widget_next = tgui_widget_get(widget->sibling_next);
+        if(container->layout.type == TGUI_LAYOUT_VERTICAL)
+        {
+            widget->dimension.x = container->layout.padding;
+            if(widget_next) widget->dimension.y = widget_next->dimension.y + widget_next->dimension.height + container->layout.padding;
+        }
+        if(container->layout.type == TGUI_LAYOUT_HORIZONTAL)
+        {
+            widget->dimension.y = container->layout.padding;
+            if(widget_next) widget->dimension.x = widget_next->dimension.x + widget_next->dimension.width + container->layout.padding;
+        }
+        widget = widget_next;
+    }
+}
+
+static void tgui_container_recalculate_widget_position(TGuiWidget *container)
+{
+
+    while(container)
+    {
+        TGuiWidget *first_child = tgui_widget_get(container->child_first);
+        if(first_child)
+        {
+            tgui_container_set_recalculate_childs_position(container, first_child);
+        }
+        container = tgui_widget_get(container->parent);
+    }
 }
 
 void tgui_container_add_widget(TGuiHandle container_handle, TGuiHandle widget_handle)
@@ -154,19 +263,26 @@ void tgui_container_add_widget(TGuiHandle container_handle, TGuiHandle widget_ha
     widget->sibling_next = container->child_first; 
     container->child_first = widget_handle;
     
-    // TODO: maybe this should be a funtion to update the layout
-    container->dimension.width = widget->dimension.width + container->layout.padding*2;
-    container->dimension.height += widget->dimension.height + container->layout.padding;
-    if(container->child_last == widget_handle)
+    // NOTE: recalculate the dimensions
+    tgui_container_recalculate_dimension(container);
+    // NOTE: set the widget position inside container
+    tgui_container_recalculate_widget_position(container);
+}
+
+void tgui_widget_to_root(TGuiHandle widget_handle)
+{
+    TGuiState *state = &tgui_global_state;
+    TGuiWidget *widget = tgui_widget_get(widget_handle);
+    if(!state->root)
     {
-        widget->dimension.x = container->layout.padding;
-        widget->dimension.y = container->layout.padding;
+        state->root = widget_handle;
     }
     else
     {
-        TGuiWidget *widget_next = tgui_widget_get(widget->sibling_next);
-        widget->dimension.x = widget_next->dimension.x;
-        widget->dimension.y = widget_next->dimension.y + widget->dimension.height + container->layout.padding;
+        TGuiWidget *root = tgui_widget_get(state->root);
+        widget->sibling_next = root->handle;
+        root->sibling_prev = widget_handle;
+        state->root = widget_handle;
     }
 }
 
@@ -174,11 +290,14 @@ TGuiRect tgui_widget_abs_pos(TGuiHandle handle)
 {
     TGuiWidget *widget = tgui_widget_get(handle);
     TGuiRect result = widget->dimension;
-    if(widget->parent)
+    TGuiV2 base_pos = {0};
+    while(widget->parent)
     {
         TGuiWidget *parent = tgui_widget_get(widget->parent);
-        result.pos = tgui_v2_add(parent->dimension.pos, widget->dimension.pos);
+        base_pos = tgui_v2_add(base_pos, parent->dimension.pos);
+        widget = parent;
     }
+    result.pos = tgui_v2_add(result.pos, base_pos);
     return result; 
 }
 
@@ -187,7 +306,7 @@ void tgui_widget_update(TGuiHandle handle)
     TGuiState *state = &tgui_global_state;
     TGuiWidget *widget = tgui_widget_get(handle);
     TGuiRect widget_abs_rect = tgui_widget_abs_pos(handle);
-
+    
     if(widget->flags & TGUI_FOCUSABLE)
     {
         TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y);
@@ -198,7 +317,14 @@ void tgui_widget_update(TGuiHandle handle)
     }
     if(widget->flags & TGUI_CLICKABLE)
     {
-        if((state->focus == widget->handle) && state->mouse_up)
+        widget->active = false;
+        TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y);
+        b32 is_over = tgui_point_inside_rect(mouse, widget_abs_rect);
+        if(is_over && state->mouse_is_down)
+        {
+            widget->active = true;
+        }
+        if(is_over && state->mouse_up)
         {
             TGuiEventButton button_evet = {0};
             button_evet.type = TGUI_EVEN_BUTTON;
@@ -206,19 +332,30 @@ void tgui_widget_update(TGuiHandle handle)
             tgui_push_event((TGuiEvent)button_evet);
         }
     }
+    if(widget->flags & TGUI_CHECKABLE)
+    {
+        TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y);
+        b32 is_over = tgui_point_inside_rect(mouse, widget_abs_rect);
+        if(is_over && state->mouse_up)
+        {
+            widget->active = !widget->active;
+        }
+    }
 }
 
 void tgui_widget_render(TGuiHandle handle)
 {
     TGuiWidget *widget = tgui_widget_get(handle);
-    TGuiRect widget_abs_rect = tgui_widget_abs_pos(handle);
+    if(!widget->visible) return;
     
+    TGuiRect widget_abs_rect = tgui_widget_abs_pos(handle);
     switch(widget->type)
     {
         case TGUI_CONTAINER:
         {
             TGuiDrawCommand draw_cmd = {0};
-            draw_cmd.type = TGUI_DRAWCMD_RECT;
+            draw_cmd.type = TGUI_DRAWCMD_ROUNDED_RECT;
+            draw_cmd.ratio = 16;
             draw_cmd.descriptor = widget_abs_rect;
             u32 color = TGUI_BLACK; 
             draw_cmd.color = color;
@@ -230,6 +367,10 @@ void tgui_widget_render(TGuiHandle handle)
             draw_cmd.type = TGUI_DRAWCMD_RECT;
             draw_cmd.descriptor = widget_abs_rect;
             u32 color = TGUI_GREY; 
+            if(widget->active)
+            {
+                color = TGUI_ORANGE;
+            }
             draw_cmd.color = color;
             tgui_push_draw_command(draw_cmd);
             if(widget->text)
@@ -237,6 +378,34 @@ void tgui_widget_render(TGuiHandle handle)
                 TGuiRect text_rect;
                 text_rect.dim = widget->text_dim;
                 text_rect.pos = tgui_v2_sub(tgui_v2_add(widget_abs_rect.pos, tgui_v2_scale(widget_abs_rect.dim, 0.5f)), tgui_v2_scale(widget->text_dim, 0.5f));
+
+                TGuiDrawCommand text_cmd = {0};
+                text_cmd.type = TGUI_DRAWCMD_TEXT;
+                text_cmd.descriptor = text_rect;
+                text_cmd.text = widget->text;
+                tgui_push_draw_command(text_cmd);
+            }
+        } break;
+        case TGUI_CHECKBOX:
+        {
+            TGuiDrawCommand draw_cmd = {0};
+            draw_cmd.type = TGUI_DRAWCMD_ROUNDED_RECT;
+            draw_cmd.descriptor = widget_abs_rect;
+            draw_cmd.ratio = 4;
+            u32 color = TGUI_RED; 
+            if(widget->active)
+            {
+                color = TGUI_GREEN;
+            }
+            draw_cmd.color = color;
+            tgui_push_draw_command(draw_cmd);
+            if(widget->text)
+            { 
+                TGuiRect text_rect;
+                text_rect.dim = widget->text_dim;
+                text_rect.pos = widget_abs_rect.pos;
+                text_rect.pos.y += widget_abs_rect.height*0.5f - text_rect.dim.y*0.5f;
+                text_rect.pos.x += widget_abs_rect.width + 5;
 
                 TGuiDrawCommand text_cmd = {0};
                 text_cmd.type = TGUI_DRAWCMD_TEXT;
@@ -435,8 +604,16 @@ void tgui_update(void)
     state->event_queue.count = 0;
     
     // NOTE: update all widget in the state widget tree
+    state->focus = 0;
     tgui_widget_recursive_descent(state->root, tgui_widget_update);
     tgui_widget_recursive_descent(state->root, tgui_widget_render);
+    if(state->focus)
+    {
+        TGuiEventFocus button_evet = {0};
+        button_evet.type = TGUI_EVEN_FOCUS;
+        button_evet.handle = state->focus;
+        tgui_push_event((TGuiEvent)button_evet);
+    }
 }
 
 void tgui_draw_command_buffer(void)
@@ -457,6 +634,12 @@ void tgui_draw_command_buffer(void)
                 i32 max_x = draw_cmd.descriptor.x + draw_cmd.descriptor.width;
                 i32 max_y = draw_cmd.descriptor.y + draw_cmd.descriptor.height;
                 tgui_draw_rect(state->backbuffer, draw_cmd.descriptor.x, draw_cmd.descriptor.y, max_x, max_y, draw_cmd.color);
+            } break;
+            case TGUI_DRAWCMD_ROUNDED_RECT:
+            {
+                i32 max_x = draw_cmd.descriptor.x + draw_cmd.descriptor.width;
+                i32 max_y = draw_cmd.descriptor.y + draw_cmd.descriptor.height;
+                tgui_draw_rounded_rect(state->backbuffer, draw_cmd.descriptor.x, draw_cmd.descriptor.y, max_x, max_y, draw_cmd.color, draw_cmd.ratio);
             } break;
             case TGUI_DRAWCMD_BITMAP:
             {

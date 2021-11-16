@@ -135,6 +135,7 @@ typedef enum TGuiDrawCommandType
 {
     TGUI_DRAWCMD_CLEAR,
     TGUI_DRAWCMD_RECT,
+    TGUI_DRAWCMD_ROUNDED_RECT,
     TGUI_DRAWCMD_BITMAP,
     TGUI_DRAWCMD_TEXT,
     
@@ -146,6 +147,7 @@ typedef struct TGuiDrawCommand
     TGuiDrawCommandType type;
     TGuiRect descriptor;
     TGuiBitmap *bitmap;
+    u32 ratio;
     u32 color;
     char *text;
 } TGuiDrawCommand;
@@ -164,6 +166,7 @@ typedef enum TGuiWidgetType
 {
     TGUI_CONTAINER,
     TGUI_BUTTON,
+    TGUI_CHECKBOX,
     
     TGUI_COUNT,
 } TGuiWidgetType;
@@ -173,10 +176,20 @@ typedef enum TGuiWidgetFlag
 {
     TGUI_FOCUSABLE = 1 << 0,
     TGUI_CLICKABLE = 1 << 1,
+    TGUI_CHECKABLE = 2 << 1,
 } TGuiWidgetFlag;
+
+typedef enum TGuiLayoutType
+{
+    TGUI_LAYOUT_HORIZONTAL,
+    TGUI_LAYOUT_VERTICAL,
+    
+    TGUI_LAYOUT_COUNT,
+} TGuiLayoutType;
 
 typedef struct TGuiWidgetLayout
 {
+    TGuiLayoutType type;
     u32 padding;
 } TGuiWidgetLayout;
 
@@ -196,7 +209,10 @@ typedef struct TGuiWidget
     TGuiWidgetLayout layout;
     TGuiRect dimension;
     TGuiV2 text_dim;
+    b32 active;
+    b32 visible;
     char *text;
+
 } TGuiWidget;
 
 // TODO: if we use a dynamic pool allocator and the free list need to be updated
@@ -247,9 +263,12 @@ extern TGuiState tgui_global_state;
 
 typedef void (*TGuiWidgetFP)(TGuiHandle handle);
 
-TGUI_API TGuiHandle tgui_create_container(void);
+TGUI_API TGuiHandle tgui_create_container(TGuiLayoutType layout, b32 visible, u32 padding);
 TGUI_API TGuiHandle tgui_create_button(char *label);
+TGUI_API TGuiHandle tgui_create_checkbox(char *label);
 TGUI_API void tgui_container_add_widget(TGuiHandle container_handle, TGuiHandle widget_handle);
+TGUI_API void tgui_widget_to_root(TGuiHandle widget_handle);
+
 void tgui_widget_update(TGuiHandle handle);
 void tgui_widget_render(TGuiHandle handle);
 void tgui_widget_recursive_descent(TGuiHandle handle, TGuiWidgetFP function);
