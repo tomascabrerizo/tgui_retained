@@ -167,16 +167,19 @@ typedef enum TGuiWidgetType
     TGUI_CONTAINER,
     TGUI_BUTTON,
     TGUI_CHECKBOX,
+    TGUI_SLIDER,
     
     TGUI_COUNT,
 } TGuiWidgetType;
 
 // NOTE: type are use for update the widget 
+// TODO: flags have to gone its widget have its specific upfate and members
 typedef enum TGuiWidgetFlag
 {
     TGUI_FOCUSABLE = 1 << 0,
     TGUI_CLICKABLE = 1 << 1,
-    TGUI_CHECKABLE = 2 << 1,
+    TGUI_CHECKABLE = 1 << 2,
+    TGUI_SLIDABLE =  1 << 3,
 } TGuiWidgetFlag;
 
 typedef enum TGuiLayoutType
@@ -206,20 +209,23 @@ typedef struct TGuiWidget
     
     TGuiWidgetType type;
     TGuiWidgetFlag flags;
-    TGuiWidgetLayout layout;
     
+    // TODO: this look like the widget need to be a discriminated union
+    //NOTE: use by all widget
     TGuiRect dimension;
     TGuiV2 size;
     TGuiV2 text_dim;
-    
-    b32 active;
+    // NOTE: use by container
+    TGuiWidgetLayout layout;
     b32 visible;
+    // NOTE: use by sliders
+    f32 slider_pos_x;
+    // NOTE: use by buttons and checkbox
+    b32 active;
     char *text;
 
 } TGuiWidget;
 
-// TODO: if we use a dynamic pool allocator and the free list need to be updated
-// every time the memory is reallocated
 typedef struct TGuiWidgetFree
 {
     TGuiHandle handle;
@@ -269,6 +275,7 @@ typedef void (*TGuiWidgetFP)(TGuiHandle handle);
 TGUI_API TGuiHandle tgui_create_container(TGuiLayoutType layout, b32 visible, u32 padding);
 TGUI_API TGuiHandle tgui_create_button(char *label);
 TGUI_API TGuiHandle tgui_create_checkbox(char *label);
+TGUI_API TGuiHandle tgui_create_slider(void);
 TGUI_API void tgui_container_add_widget(TGuiHandle container_handle, TGuiHandle widget_handle);
 TGUI_API void tgui_widget_to_root(TGuiHandle widget_handle);
 TGUI_API void tgui_set_widget_position(TGuiHandle widget_handle, f32 x, f32 y);

@@ -142,8 +142,22 @@ TGuiHandle tgui_create_checkbox(char *label)
     checkbox->flags = TGUI_FOCUSABLE | TGUI_CHECKABLE;
     tgui_widget_set_text(checkbox, label);
     checkbox->dimension = tgui_rect_xywh(0, 0, 20, 20);
-    checkbox->size = tgui_v2_add(checkbox->dimension.dim, checkbox->text_dim);
+    checkbox->size = checkbox->dimension.dim ;
+    checkbox->size.x += checkbox->text_dim.x;
     
+    return handle;
+}
+
+TGuiHandle tgui_create_slider(void)
+{
+    TGuiHandle handle = TGUI_INVALID_HANDLE;
+    TGuiWidget *slider = tgui_create_widget(&handle); 
+    slider->type = TGUI_SLIDER;
+    slider->flags = TGUI_FOCUSABLE | TGUI_SLIDABLE;
+    slider->dimension = tgui_rect_xywh(0, 0, 20, 20);
+    slider->size = tgui_v2(200, slider->dimension.height);
+    slider->slider_pos_x = 0.5f;
+
     return handle;
 }
 
@@ -289,7 +303,6 @@ static void tgui_container_set_childs_position(TGuiWidget *container, TGuiWidget
 
 static void tgui_container_recalculate_widget_position(TGuiWidget *container)
 {
-
     while(container)
     {
         TGuiWidget *first_child = tgui_widget_get(container->child_first);
@@ -365,6 +378,34 @@ void tgui_widget_update(TGuiHandle handle)
             widget->active = !widget->active;
         }
     }
+    if(widget->flags & TGUI_SLIDABLE)
+    {
+        TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y);
+        f32 mouse_x_rel = (mouse.x - widget_abs_rect.x) / widget->size.x;
+        widget_abs_rect.x += (widget->slider_pos_x * widget->size.x)-(widget->dimension.width*0.5f); 
+        widget_abs_rect.y -= (widget->dimension.height*0.25f); 
+        b32 is_over = tgui_point_inside_rect(mouse, widget_abs_rect);
+        if(is_over && state->mouse_is_down)
+        {
+            widget->active = true;
+        }
+        if(!state->mouse_is_down)
+        {
+            widget->active = false;
+        }
+        if(widget->active)
+        {
+            if(mouse_x_rel < 0.0f)
+            {
+                mouse_x_rel = 0;
+            }
+            if(mouse_x_rel > 1.0f)
+            {
+                mouse_x_rel = 1.0f;
+            }
+            widget->slider_pos_x = mouse_x_rel; 
+        }
+    }
 }
 
 void tgui_widget_render(TGuiHandle handle)
@@ -437,6 +478,30 @@ void tgui_widget_render(TGuiHandle handle)
                 text_cmd.text = widget->text;
                 tgui_push_draw_command(text_cmd);
             }
+        } break;
+        case TGUI_SLIDER:
+        {
+            f32 slider_ratio = 0.5f;
+            TGuiDrawCommand line_cmd = {0};
+            line_cmd.type = TGUI_DRAWCMD_RECT;
+            line_cmd.descriptor = widget_abs_rect;
+            line_cmd.descriptor.width = widget->size.x;
+            line_cmd.descriptor.height = widget->size.y * slider_ratio;
+            line_cmd.color = TGUI_ORANGE;
+            tgui_push_draw_command(line_cmd);
+
+            TGuiDrawCommand draw_cmd = {0};
+            draw_cmd.type = TGUI_DRAWCMD_ROUNDED_RECT;
+            draw_cmd.descriptor = widget_abs_rect;
+            draw_cmd.descriptor.width = widget->dimension.width;
+            draw_cmd.descriptor.height = widget->dimension.height;
+            draw_cmd.descriptor.x += (widget->slider_pos_x*widget->size.x) - (widget->dimension.width*0.5f);
+            draw_cmd.descriptor.y += ((widget->size.y*slider_ratio)*0.5f - widget->dimension.height*0.5f);
+            draw_cmd.ratio = 4;
+            draw_cmd.color = TGUI_GREY;
+            tgui_push_draw_command(draw_cmd);
+        
+
         } break;
         case TGUI_COUNT:
         {
