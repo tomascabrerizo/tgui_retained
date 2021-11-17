@@ -145,24 +145,32 @@ int main(int argc, char** argv)
     // NOTE: init TGUI lib
     tgui_init(&tgui_backbuffer, &test_font);
 
-    TGuiHandle container = tgui_create_container(TGUI_LAYOUT_HORIZONTAL, true, 20);
+    TGuiHandle container = tgui_create_container(TGUI_LAYOUT_HORIZONTAL, true, 10);
+    tgui_set_widget_position(container, 200, 100);
     tgui_widget_to_root(container);
 
     TGuiHandle column1 = tgui_create_container(TGUI_LAYOUT_VERTICAL, false, 5);
     TGuiHandle column2 = tgui_create_container(TGUI_LAYOUT_VERTICAL, false, 5);
     TGuiHandle column3 = tgui_create_container(TGUI_LAYOUT_VERTICAL, false, 5);
 
+    tgui_container_add_widget(container, column1);
+    tgui_container_add_widget(container, column2);
+    tgui_container_add_widget(container, column3);
+
     TGuiHandle box1 = tgui_create_checkbox("box 0");
     TGuiHandle box2 = tgui_create_checkbox("box 1");
     TGuiHandle box3 = tgui_create_checkbox("box 2");
-    
-    tgui_container_add_widget(container, column2);
-    tgui_container_add_widget(container, column1);
-    tgui_container_add_widget(container, column3);
+
+    TGuiHandle buttton3 = tgui_create_button("button");
+    TGuiHandle box4 = tgui_create_checkbox("box 3");
+    TGuiHandle row = tgui_create_container(TGUI_LAYOUT_HORIZONTAL, false, 5);
+    tgui_container_add_widget(row, buttton3);
+    tgui_container_add_widget(row, box4);
     
     tgui_container_add_widget(column3, box1);
     tgui_container_add_widget(column3, box2);
     tgui_container_add_widget(column3, box3);
+    tgui_container_add_widget(column3, row);
 
     TGuiHandle button1 = tgui_create_button("button 1");
     TGuiHandle button2 = tgui_create_button("button 2");
@@ -173,7 +181,6 @@ int main(int argc, char** argv)
     tgui_container_add_widget(column1, checkbox1);
     tgui_container_add_widget(column1, button2);
     tgui_container_add_widget(column1, checkbox2);
-    
 
     #define BUTTONS_COUNT 8
     TGuiHandle buttons[BUTTONS_COUNT];
@@ -182,7 +189,6 @@ int main(int argc, char** argv)
         buttons[i] = tgui_create_button("button");
         tgui_container_add_widget(column2, buttons[i]);
     }
-    
 
     while(global_running)
     {

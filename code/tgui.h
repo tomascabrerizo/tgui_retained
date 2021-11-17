@@ -207,8 +207,11 @@ typedef struct TGuiWidget
     TGuiWidgetType type;
     TGuiWidgetFlag flags;
     TGuiWidgetLayout layout;
+    
     TGuiRect dimension;
+    TGuiV2 size;
     TGuiV2 text_dim;
+    
     b32 active;
     b32 visible;
     char *text;
@@ -268,6 +271,7 @@ TGUI_API TGuiHandle tgui_create_button(char *label);
 TGUI_API TGuiHandle tgui_create_checkbox(char *label);
 TGUI_API void tgui_container_add_widget(TGuiHandle container_handle, TGuiHandle widget_handle);
 TGUI_API void tgui_widget_to_root(TGuiHandle widget_handle);
+TGUI_API void tgui_set_widget_position(TGuiHandle widget_handle, f32 x, f32 y);
 
 void tgui_widget_update(TGuiHandle handle);
 void tgui_widget_render(TGuiHandle handle);
