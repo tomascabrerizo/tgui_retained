@@ -161,7 +161,6 @@ typedef struct TGuiDrawCommandBuffer
     u32 count;
 } TGuiDrawCommandBuffer;
 
-// NOTE: type are use for render style
 typedef enum TGuiWidgetType
 {
     TGUI_CONTAINER,
@@ -171,16 +170,6 @@ typedef enum TGuiWidgetType
     
     TGUI_COUNT,
 } TGuiWidgetType;
-
-// NOTE: type are use for update the widget 
-// TODO: flags have to gone its widget have its specific upfate and members
-typedef enum TGuiWidgetFlag
-{
-    TGUI_FOCUSABLE = 1 << 0,
-    TGUI_CLICKABLE = 1 << 1,
-    TGUI_CHECKABLE = 1 << 2,
-    TGUI_SLIDABLE =  1 << 3,
-} TGuiWidgetFlag;
 
 typedef enum TGuiLayoutType
 {
@@ -196,6 +185,71 @@ typedef struct TGuiWidgetLayout
     u32 padding;
 } TGuiWidgetLayout;
 
+typedef struct TGuiText
+{
+    TGuiV2 size;
+    char *text;
+} TGuiText;
+
+typedef struct TGuiWidgetContainer
+{
+    // TODO: container header
+    TGuiWidgetType type;
+    TGuiV2 size;
+    TGuiV2 position;
+
+    TGuiWidgetLayout layout;
+    b32 visible;
+} TGuiWidgetContainer;
+
+typedef struct TGuiWidgetButton
+{
+    // TODO: container header
+    TGuiWidgetType type;
+    TGuiV2 size;
+    TGuiV2 position;
+
+    b32 pressed;
+    TGuiText text;
+} TGuiWidgetButton;
+
+typedef struct TGuiWidgetCheckBox
+{
+    // TODO: container header
+    TGuiWidgetType type;
+    TGuiV2 size;
+    TGuiV2 position;
+
+    TGuiV2 box_dimension;
+    b32 active;
+    TGuiText text;
+} TGuiWidgetCheckBox;
+
+typedef struct TGuiWidgetSlider
+{
+    // TODO: container header
+    TGuiWidgetType type;
+    TGuiV2 size;
+    TGuiV2 position;
+
+    TGuiV2 grip_dimension;
+    f32 value;
+} TGuiWidgetSlider;
+
+typedef union TGuiWidgetData
+{
+    struct
+    {
+        TGuiWidgetType type;
+        TGuiV2 size;
+        TGuiV2 position;
+    };
+    TGuiWidgetContainer container;
+    TGuiWidgetButton button;
+    TGuiWidgetCheckBox checkbox;
+    TGuiWidgetSlider slider;
+} TGuiWidgetData;
+
 typedef struct TGuiWidget
 {
     TGuiHandle handle;
@@ -207,23 +261,7 @@ typedef struct TGuiWidget
     TGuiHandle sibling_next;
     TGuiHandle sibling_prev;
     
-    TGuiWidgetType type;
-    TGuiWidgetFlag flags;
-    
-    // TODO: this look like the widget need to be a discriminated union
-    //NOTE: use by all widget
-    TGuiRect dimension;
-    TGuiV2 size;
-    TGuiV2 text_dim;
-    // NOTE: use by container
-    TGuiWidgetLayout layout;
-    b32 visible;
-    // NOTE: use by sliders
-    f32 slider_pos_x;
-    // NOTE: use by buttons and checkbox
-    b32 active;
-    char *text;
-
+    TGuiWidgetData data;
 } TGuiWidget;
 
 typedef struct TGuiWidgetFree
@@ -283,11 +321,12 @@ TGUI_API void tgui_set_widget_position(TGuiHandle widget_handle, f32 x, f32 y);
 void tgui_widget_update(TGuiHandle handle);
 void tgui_widget_render(TGuiHandle handle);
 void tgui_widget_recursive_descent(TGuiHandle handle, TGuiWidgetFP function);
-TGuiRect tgui_widget_abs_pos(TGuiHandle handle);
+TGuiV2 tgui_widget_abs_pos(TGuiHandle handle);
 
 //-----------------------------------------------------
 // NOTE: core lib functions
 //-----------------------------------------------------
+// TODO: create tgui_destroy(void) function
 TGUI_API void tgui_init(TGuiBitmap *backbuffer, TGuiFont *font);
 TGUI_API void tgui_update(void);
 TGUI_API void tgui_draw_command_buffer(void);
