@@ -191,66 +191,7 @@ typedef struct TGuiText
     char *text;
 } TGuiText;
 
-typedef struct TGuiWidgetContainer
-{
-    // TODO: container header
-    TGuiWidgetType type;
-    TGuiV2 size;
-    TGuiV2 position;
-
-    TGuiWidgetLayout layout;
-    b32 visible;
-} TGuiWidgetContainer;
-
-typedef struct TGuiWidgetButton
-{
-    // TODO: container header
-    TGuiWidgetType type;
-    TGuiV2 size;
-    TGuiV2 position;
-
-    b32 pressed;
-    TGuiText text;
-} TGuiWidgetButton;
-
-typedef struct TGuiWidgetCheckBox
-{
-    // TODO: container header
-    TGuiWidgetType type;
-    TGuiV2 size;
-    TGuiV2 position;
-
-    TGuiV2 box_dimension;
-    b32 active;
-    TGuiText text;
-} TGuiWidgetCheckBox;
-
-typedef struct TGuiWidgetSlider
-{
-    // TODO: container header
-    TGuiWidgetType type;
-    TGuiV2 size;
-    TGuiV2 position;
-
-    TGuiV2 grip_dimension;
-    f32 value;
-} TGuiWidgetSlider;
-
-typedef union TGuiWidgetData
-{
-    struct
-    {
-        TGuiWidgetType type;
-        TGuiV2 size;
-        TGuiV2 position;
-    };
-    TGuiWidgetContainer container;
-    TGuiWidgetButton button;
-    TGuiWidgetCheckBox checkbox;
-    TGuiWidgetSlider slider;
-} TGuiWidgetData;
-
-typedef struct TGuiWidget
+typedef struct TGuiWidgetHeader
 {
     TGuiHandle handle;
 
@@ -260,8 +201,49 @@ typedef struct TGuiWidget
     TGuiHandle child_last;
     TGuiHandle sibling_next;
     TGuiHandle sibling_prev;
+
+    TGuiWidgetType type;
+    TGuiV2 size;
+    TGuiV2 position;
     
-    TGuiWidgetData data;
+} TGuiWidgetHeader;
+
+typedef struct TGuiWidgetContainer
+{
+    TGuiWidgetHeader header;
+    b32 visible;
+    TGuiWidgetLayout layout;
+} TGuiWidgetContainer;
+
+typedef struct TGuiWidgetButton
+{
+    TGuiWidgetHeader header;
+    b32 pressed;
+    TGuiText text;
+} TGuiWidgetButton;
+
+typedef struct TGuiWidgetCheckBox
+{
+    TGuiWidgetHeader header;
+    b32 active;
+    TGuiText text;
+    TGuiV2 box_dimension;
+} TGuiWidgetCheckBox;
+
+typedef struct TGuiWidgetSlider
+{
+    TGuiWidgetHeader header;
+    f32 value;
+    TGuiV2 grip_dimension;
+} TGuiWidgetSlider;
+
+typedef union TGuiWidget
+{
+    TGuiWidgetHeader header;
+    TGuiWidgetContainer container;
+    TGuiWidgetButton button;
+    TGuiWidgetCheckBox checkbox;
+    TGuiWidgetSlider slider;
 } TGuiWidget;
 
 typedef struct TGuiWidgetFree

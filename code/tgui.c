@@ -91,7 +91,7 @@ static inline TGuiWidget *tgui_create_widget(TGuiHandle *handle)
     *handle = tgui_widget_allocator_alloc(&state->widget_allocator);
     TGuiWidget *widget = tgui_widget_get(*handle);
     memset(widget, 0, sizeof(TGuiWidget));
-    widget->handle = *handle;
+    widget->header.handle = *handle;
     
     return widget;
 }
@@ -99,14 +99,12 @@ static inline TGuiWidget *tgui_create_widget(TGuiHandle *handle)
 TGuiHandle tgui_create_container(TGuiLayoutType type, b32 visible, u32 padding)
 {
     TGuiHandle handle = TGUI_INVALID_HANDLE;
-    TGuiWidget *container = tgui_create_widget(&handle); 
-    TGuiWidgetContainer *container_data = (TGuiWidgetContainer *)&container->data;
-    container_data->type = TGUI_CONTAINER;
-    container_data->size = tgui_v2(0, 0);
-    container_data->layout.type = type;
-    container_data->layout.padding = padding;
-    container_data->visible = visible;
-    
+    TGuiWidget *widget = tgui_create_widget(&handle); 
+    widget->header.type = TGUI_CONTAINER;
+    widget->header.size = tgui_v2(0, 0);
+    widget->container.layout.type = type;
+    widget->container.layout.padding = padding;
+    widget->container.visible = visible;
     return handle;
 }
 
@@ -121,40 +119,34 @@ static inline void tgui_widget_set_text(TGuiText *text, char *label)
 TGuiHandle tgui_create_button(char *label)
 {
     TGuiHandle handle = TGUI_INVALID_HANDLE;
-    TGuiWidget *button = tgui_create_widget(&handle); 
-    TGuiWidgetButton *button_data = (TGuiWidgetButton *)&button->data;
-    button_data->type = TGUI_BUTTON;
-    button_data->size = tgui_v2(100, 30);
-    button_data->pressed = false;
-    tgui_widget_set_text(&button_data->text, label);
-    
+    TGuiWidget *widget = tgui_create_widget(&handle); 
+    widget->header.type = TGUI_BUTTON;
+    widget->header.size = tgui_v2(100, 30);
+    widget->button.pressed = false;
+    tgui_widget_set_text(&widget->button.text, label);
     return handle;
 }
 
 TGuiHandle tgui_create_checkbox(char *label)
 {
     TGuiHandle handle = TGUI_INVALID_HANDLE;
-    TGuiWidget *checkbox = tgui_create_widget(&handle); 
-    TGuiWidgetCheckBox *checkbox_data = (TGuiWidgetCheckBox *)&checkbox->data;
-    checkbox_data->type = TGUI_CHECKBOX;
-    checkbox_data->box_dimension = tgui_v2(20, 20);
-    tgui_widget_set_text(&checkbox_data->text, label);
-    checkbox_data->size = checkbox_data->box_dimension;
-    checkbox_data->size.x += checkbox_data->text.size.x;
-    
+    TGuiWidget *widget = tgui_create_widget(&handle); 
+    widget->header.type = TGUI_CHECKBOX;
+    widget->checkbox.box_dimension = tgui_v2(20, 20);
+    tgui_widget_set_text(&widget->checkbox.text, label);
+    widget->header.size = widget->checkbox.box_dimension;
+    widget->header.size.x += widget->checkbox.text.size.x+5;
     return handle;
 }
 
 TGuiHandle tgui_create_slider(void)
 {
     TGuiHandle handle = TGUI_INVALID_HANDLE;
-    TGuiWidget *slider = tgui_create_widget(&handle); 
-    TGuiWidgetSlider *slider_data = (TGuiWidgetSlider *)&slider->data; 
-    slider_data->type = TGUI_SLIDER;
-    slider_data->grip_dimension = tgui_v2(20, 20);
-    slider_data->size = tgui_v2(200, slider_data->grip_dimension.y);
-    slider_data->value = 0.5f;
-
+    TGuiWidget *widget = tgui_create_widget(&handle); 
+    widget->header.type = TGUI_SLIDER;
+    widget->slider.grip_dimension = tgui_v2(20, 20);
+    widget->header.size = tgui_v2(200, widget->slider.grip_dimension.y);
+    widget->slider.value = 0.5f;
     return handle;
 }
 
@@ -169,8 +161,8 @@ void tgui_widget_to_root(TGuiHandle widget_handle)
     else
     {
         TGuiWidget *root = tgui_widget_get(state->root);
-        widget->sibling_next = root->handle;
-        root->sibling_prev = widget_handle;
+        widget->header.sibling_next = root->header.handle;
+        root->header.sibling_prev = widget_handle;
         state->root = widget_handle;
     }
 }
@@ -178,18 +170,18 @@ void tgui_widget_to_root(TGuiHandle widget_handle)
 void tgui_set_widget_position(TGuiHandle widget_handle, f32 x, f32 y)
 {
     TGuiWidget *widget = tgui_widget_get(widget_handle);
-    widget->data.position = tgui_v2(x, y);
+    widget->header.position = tgui_v2(x, y);
 }
 
 TGuiV2 tgui_widget_abs_pos(TGuiHandle handle)
 {
     TGuiWidget *widget = tgui_widget_get(handle);
-    TGuiV2 result = widget->data.position;
+    TGuiV2 result = widget->header.position;
     TGuiV2 base_pos = {0};
-    while(widget->parent)
+    while(widget->header.parent)
     {
-        TGuiWidget *parent = tgui_widget_get(widget->parent);
-        base_pos = tgui_v2_add(base_pos, parent->data.position);
+        TGuiWidget *parent = tgui_widget_get(widget->header.parent);
+        base_pos = tgui_v2_add(base_pos, parent->header.position);
         widget = parent;
     }
     result = tgui_v2_add(result, base_pos);
@@ -207,19 +199,19 @@ static void tgui_container_set_container_total_size(TGuiWidgetContainer *contain
         {
             case TGUI_LAYOUT_VERTICAL:
             {
-                if(widget->data.size.x > total_container_size.x)
+                if(widget->header.size.x > total_container_size.x)
                 {
-                    total_container_size.x = widget->data.size.x;
+                    total_container_size.x = widget->header.size.x;
                 }
-                total_container_size.y += widget->data.size.y;
+                total_container_size.y += widget->header.size.y;
             } break;
             case TGUI_LAYOUT_HORIZONTAL:
             {
-                if(widget->data.size.y > total_container_size.y)
+                if(widget->header.size.y > total_container_size.y)
                 {
-                    total_container_size.y = widget->data.size.y;
+                    total_container_size.y = widget->header.size.y;
                 }
-                total_container_size.x += widget->data.size.x;
+                total_container_size.x += widget->header.size.x;
             } break;
             case TGUI_LAYOUT_COUNT:
             {
@@ -227,7 +219,7 @@ static void tgui_container_set_container_total_size(TGuiWidgetContainer *contain
             } break;
         }
         ++num_child;
-        widget = tgui_widget_get(widget->sibling_next);
+        widget = tgui_widget_get(widget->header.sibling_next);
     }
     // NOTE: add the container last padding
     switch(container->layout.type)
@@ -248,23 +240,22 @@ static void tgui_container_set_container_total_size(TGuiWidgetContainer *contain
         } break;
     }
     
-    container->size = total_container_size;
+    container->header.size = total_container_size;
 }
 
 static void tgui_container_recalculate_dimension(TGuiWidget *container)
 {
     while(container)
     {
-        TGuiWidgetContainer *container_data = (TGuiWidgetContainer *)&container->data;
-        if(container_data->type == TGUI_CONTAINER)
+        if(container->header.type == TGUI_CONTAINER)
         {
-            TGuiWidget *first_child = tgui_widget_get(container->child_first);
+            TGuiWidget *first_child = tgui_widget_get(container->header.child_first);
             if(first_child)
             {
-                tgui_container_set_container_total_size(container_data, first_child);
+                tgui_container_set_container_total_size(&container->container, first_child);
             }
         }
-        container = tgui_widget_get(container->parent);
+        container = tgui_widget_get(container->header.parent);
     }
 }
 
@@ -272,29 +263,29 @@ static void tgui_container_set_childs_position(TGuiWidgetContainer *container, T
 {
     while(widget)
     {
-        TGuiWidget *widget_next = tgui_widget_get(widget->sibling_next);
+        TGuiWidget *widget_next = tgui_widget_get(widget->header.sibling_next);
         if(container->layout.type == TGUI_LAYOUT_VERTICAL)
         {
-            widget->data.position.x = container->layout.padding;
+            widget->header.position.x = container->layout.padding;
             if(widget_next) 
             {
-                widget->data.position.y = widget_next->data.position.y + widget_next->data.size.y + container->layout.padding;
+                widget->header.position.y = widget_next->header.position.y + widget_next->header.size.y + container->layout.padding;
             }
             else
             {
-                widget->data.position.y = container->layout.padding;
+                widget->header.position.y = container->layout.padding;
             }
         }
         if(container->layout.type == TGUI_LAYOUT_HORIZONTAL)
         {
-            widget->data.position.y = container->layout.padding;
+            widget->header.position.y = container->layout.padding;
             if(widget_next) 
             {
-                widget->data.position.x = widget_next->data.position.x + widget_next->data.size.x + container->layout.padding;
+                widget->header.position.x = widget_next->header.position.x + widget_next->header.size.x + container->layout.padding;
             }
             else
             {
-                widget->data.position.x = container->layout.padding;
+                widget->header.position.x = container->layout.padding;
             }
         }
         widget = widget_next;
@@ -305,16 +296,15 @@ static void tgui_container_recalculate_widget_position(TGuiWidget *container)
 {
     while(container)
     {
-        TGuiWidgetContainer *container_data = (TGuiWidgetContainer *)&container->data;
-        if(container_data->type == TGUI_CONTAINER)
+        if(container->header.type == TGUI_CONTAINER)
         {
-            TGuiWidget *first_child = tgui_widget_get(container->child_first);
+            TGuiWidget *first_child = tgui_widget_get(container->header.child_first);
             if(first_child)
             {
-                tgui_container_set_childs_position(container_data, first_child);
+                tgui_container_set_childs_position(&container->container, first_child);
             }
         }
-        container = tgui_widget_get(container->parent);
+        container = tgui_widget_get(container->header.parent);
     }
 }
 
@@ -323,18 +313,18 @@ void tgui_container_add_widget(TGuiHandle container_handle, TGuiHandle widget_ha
     TGuiWidget *container = tgui_widget_get(container_handle);
     TGuiWidget *widget = tgui_widget_get(widget_handle);
     
-    if(!container->child_last)
+    if(!container->header.child_last)
     {
-        container->child_last = widget_handle;
+        container->header.child_last = widget_handle;
     }
-    widget->parent = container_handle; 
-    if(container->child_first)
+    widget->header.parent = container_handle; 
+    if(container->header.child_first)
     {
-        TGuiWidget *old_first_child = tgui_widget_get(container->child_first);
-        old_first_child->sibling_prev = widget_handle; 
+        TGuiWidget *old_first_child = tgui_widget_get(container->header.child_first);
+        old_first_child->header.sibling_prev = widget_handle; 
     }
-    widget->sibling_next = container->child_first; 
-    container->child_first = widget_handle;
+    widget->header.sibling_next = container->header.child_first; 
+    container->header.child_first = widget_handle;
     
     // NOTE: recalculate the dimensions
     tgui_container_recalculate_dimension(container);
@@ -350,7 +340,7 @@ void tgui_widget_update(TGuiHandle handle)
     UNUSED_VAR(widget_abs_pos);
     UNUSED_VAR(state);
     
-    switch(widget->data.type)
+    switch(widget->header.type)
     {
         case TGUI_CONTAINER:
         {}break;
@@ -372,18 +362,18 @@ void tgui_widget_render(TGuiHandle handle)
     TGuiWidget *widget = tgui_widget_get(handle);
     TGuiV2 widget_abs_pos = tgui_widget_abs_pos(handle);
 
-    switch(widget->data.type)
+    switch(widget->header.type)
     {
         case TGUI_CONTAINER:
         {
-            TGuiWidgetContainer *container_data = (TGuiWidgetContainer *)&widget->data;
+            TGuiWidgetContainer *container_data = &widget->container;
             if(!container_data->visible) return;
 
             TGuiDrawCommand draw_cmd = {0};
             draw_cmd.type = TGUI_DRAWCMD_ROUNDED_RECT;
             draw_cmd.ratio = 16;
             draw_cmd.descriptor.pos = widget_abs_pos;
-            draw_cmd.descriptor.dim = widget->data.size;
+            draw_cmd.descriptor.dim = widget->header.size;
             u32 color = TGUI_BLACK; 
             draw_cmd.color = color;
             tgui_push_draw_command(draw_cmd);
@@ -393,9 +383,9 @@ void tgui_widget_render(TGuiHandle handle)
             TGuiDrawCommand draw_cmd = {0};
             draw_cmd.type = TGUI_DRAWCMD_RECT;
             draw_cmd.descriptor.pos = widget_abs_pos;
-            draw_cmd.descriptor.dim = widget->data.size;
+            draw_cmd.descriptor.dim = widget->header.size;
             
-            TGuiWidgetButton *button_data = (TGuiWidgetButton *)&widget->data;
+            TGuiWidgetButton *button_data = &widget->button;
             u32 color = TGUI_GREY; 
             if(button_data->pressed)
             {
@@ -406,7 +396,7 @@ void tgui_widget_render(TGuiHandle handle)
                 
             TGuiRect text_rect;
             text_rect.dim = button_data->text.size;
-            text_rect.pos = tgui_v2_sub(tgui_v2_add(widget_abs_pos, tgui_v2_scale(button_data->size, 0.5f)), tgui_v2_scale(button_data->text.size, 0.5f));
+            text_rect.pos = tgui_v2_sub(tgui_v2_add(widget_abs_pos, tgui_v2_scale(button_data->header.size, 0.5f)), tgui_v2_scale(button_data->text.size, 0.5f));
 
             TGuiDrawCommand text_cmd = {0};
             text_cmd.type = TGUI_DRAWCMD_TEXT;
@@ -420,7 +410,7 @@ void tgui_widget_render(TGuiHandle handle)
             TGuiDrawCommand draw_cmd = {0};
             draw_cmd.type = TGUI_DRAWCMD_ROUNDED_RECT;
             
-            TGuiWidgetCheckBox *checkbox_data = (TGuiWidgetCheckBox *)&widget->data;
+            TGuiWidgetCheckBox *checkbox_data = &widget->checkbox;
             draw_cmd.descriptor.pos = widget_abs_pos;
             draw_cmd.descriptor.dim = checkbox_data->box_dimension;
             draw_cmd.ratio = 4;
@@ -450,20 +440,20 @@ void tgui_widget_render(TGuiHandle handle)
             TGuiDrawCommand line_cmd = {0};
             line_cmd.type = TGUI_DRAWCMD_RECT;
             line_cmd.descriptor.pos = widget_abs_pos;
-            line_cmd.descriptor.dim = widget->data.size;
-            line_cmd.descriptor.width = widget->data.size.x;
-            line_cmd.descriptor.height = widget->data.size.y * slider_ratio;
+            line_cmd.descriptor.dim = widget->header.size;
+            line_cmd.descriptor.width = widget->header.size.x;
+            line_cmd.descriptor.height = widget->header.size.y * slider_ratio;
             line_cmd.color = TGUI_ORANGE;
             tgui_push_draw_command(line_cmd);
 
-            TGuiWidgetSlider *slider_data = (TGuiWidgetSlider *)&widget->data;
+            TGuiWidgetSlider *slider_data = &widget->slider;
             TGuiDrawCommand draw_cmd = {0};
             draw_cmd.type = TGUI_DRAWCMD_ROUNDED_RECT;
             draw_cmd.descriptor.pos = widget_abs_pos;
             draw_cmd.descriptor.dim = slider_data->grip_dimension;
             
-            draw_cmd.descriptor.x += (slider_data->value*widget->data.size.x) - (slider_data->grip_dimension.x*0.5f);
-            draw_cmd.descriptor.y += ((widget->data.size.y*slider_ratio)*0.5f - slider_data->grip_dimension.y*0.5f);
+            draw_cmd.descriptor.x += (slider_data->value*widget->header.size.x) - (slider_data->grip_dimension.x*0.5f);
+            draw_cmd.descriptor.y += ((widget->header.size.y*slider_ratio)*0.5f - slider_data->grip_dimension.y*0.5f);
             draw_cmd.ratio = 4;
             draw_cmd.color = TGUI_GREY;
             tgui_push_draw_command(draw_cmd);
@@ -480,12 +470,12 @@ void tgui_widget_recursive_descent(TGuiHandle handle, TGuiWidgetFP function)
     TGuiWidget *widget = tgui_widget_get(handle);
     while(widget)
     {
-        function(widget->handle);
-        if(widget->child_first)
+        function(widget->header.handle);
+        if(widget->header.child_first)
         {
-            tgui_widget_recursive_descent(widget->child_first, function);
+            tgui_widget_recursive_descent(widget->header.child_first, function);
         }
-        widget = tgui_widget_get(widget->sibling_next);
+        widget = tgui_widget_get(widget->header.sibling_next);
     }
 }
 
