@@ -211,6 +211,7 @@ typedef struct TGuiWidgetHeader
 typedef struct TGuiWidgetContainer
 {
     TGuiWidgetHeader header;
+    //----------------------
     b32 visible;
     TGuiWidgetLayout layout;
 } TGuiWidgetContainer;
@@ -218,6 +219,7 @@ typedef struct TGuiWidgetContainer
 typedef struct TGuiWidgetButton
 {
     TGuiWidgetHeader header;
+    //----------------------
     b32 pressed;
     TGuiText text;
 } TGuiWidgetButton;
@@ -225,6 +227,7 @@ typedef struct TGuiWidgetButton
 typedef struct TGuiWidgetCheckBox
 {
     TGuiWidgetHeader header;
+    //----------------------
     b32 active;
     TGuiText text;
     TGuiV2 box_dimension;
@@ -233,6 +236,7 @@ typedef struct TGuiWidgetCheckBox
 typedef struct TGuiWidgetSlider
 {
     TGuiWidgetHeader header;
+    //----------------------
     f32 value;
     TGuiV2 grip_dimension;
 } TGuiWidgetSlider;
@@ -240,6 +244,7 @@ typedef struct TGuiWidgetSlider
 typedef union TGuiWidget
 {
     TGuiWidgetHeader header;
+    //----------------------
     TGuiWidgetContainer container;
     TGuiWidgetButton button;
     TGuiWidgetCheckBox checkbox;
@@ -279,8 +284,11 @@ typedef struct TGuiState
     b32 mouse_is_down;
 
     TGuiWidgetPoolAllocator widget_allocator;
+    TGuiHandle first_root;
+    TGuiHandle last_root;
+    TGuiHandle active;
     TGuiHandle focus;
-    TGuiHandle root;
+    TGuiHandle last_focus;
 } TGuiState;
 // TODO: Maybe the state should be provided by the application?
 // NOTE: global state (stores all internal state of the GUI)
@@ -302,7 +310,8 @@ TGUI_API void tgui_set_widget_position(TGuiHandle widget_handle, f32 x, f32 y);
 
 void tgui_widget_update(TGuiHandle handle);
 void tgui_widget_render(TGuiHandle handle);
-void tgui_widget_recursive_descent(TGuiHandle handle, TGuiWidgetFP function);
+void tgui_widget_recursive_descent_first_to_last(TGuiHandle handle, TGuiWidgetFP function);
+void tgui_widget_recursive_descent_last_to_first(TGuiHandle handle, TGuiWidgetFP function);
 TGuiV2 tgui_widget_abs_pos(TGuiHandle handle);
 
 //-----------------------------------------------------

@@ -154,16 +154,17 @@ void tgui_widget_to_root(TGuiHandle widget_handle)
 {
     TGuiState *state = &tgui_global_state;
     TGuiWidget *widget = tgui_widget_get(widget_handle);
-    if(!state->root)
+    if(!state->last_root)
     {
-        state->root = widget_handle;
+        state->last_root = widget_handle;
+        state->first_root = widget_handle;
     }
     else
     {
-        TGuiWidget *root = tgui_widget_get(state->root);
+        TGuiWidget *root = tgui_widget_get(state->first_root);
         widget->header.sibling_next = root->header.handle;
         root->header.sibling_prev = widget_handle;
-        state->root = widget_handle;
+        state->first_root = widget_handle;
     }
 }
 
@@ -334,22 +335,74 @@ void tgui_container_add_widget(TGuiHandle container_handle, TGuiHandle widget_ha
 
 void tgui_widget_update(TGuiHandle handle)
 {
+    TGuiState *state = &tgui_global_state;
+    TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y); 
+
     TGuiWidget *widget = tgui_widget_get(handle);
     TGuiV2 widget_abs_pos = tgui_widget_abs_pos(handle);
-    TGuiState *state = &tgui_global_state;
-    UNUSED_VAR(widget_abs_pos);
-    UNUSED_VAR(state);
+    TGuiRect widget_rect;
+    widget_rect.pos = widget_abs_pos;
+    // TODO: create a bouding box in header
+    if(widget->header.type == TGUI_CHECKBOX)
+    {
+        widget_rect.dim = widget->checkbox.box_dimension;
+    }
+    else
+    {
+        widget_rect.dim = widget->header.size;
+    }
+    if(tgui_point_inside_rect(mouse, widget_rect))
+    {
+        state->focus = handle;
+    }
     
+    // TODO: maybe a better way to handle on top containers is walk the tree from last_child to first_child
+    // and return on the first event
+
+    b32 is_active = state->active == widget->header.handle;
+    b32 is_focus = state->focus == widget->header.handle;
+    b32 was_focus = state->last_focus == widget->header.handle;
     switch(widget->header.type)
     {
         case TGUI_CONTAINER:
         {}break;
         case TGUI_BUTTON:
-        {}break;
+        {
+            widget->button.pressed = false;
+            if(was_focus && state->mouse_down)
+            {
+                state->active = widget->header.handle;
+            }
+            if(is_active && was_focus && state->mouse_up)
+            {
+                widget->button.pressed = true;
+                
+            }
+            if(is_active && !is_focus)
+            {
+                state->active = 0;
+            }
+        }break;
         case TGUI_CHECKBOX:
-        {}break;
+        {
+            if(was_focus && state->mouse_down)
+            {
+                state->active = widget->header.handle;
+            }
+            if(is_active && was_focus && state->mouse_up)
+            {
+                widget->checkbox.active = !widget->checkbox.active;
+                
+            }
+            if(is_active && !is_focus)
+            {
+                state->active = 0;
+            }
+        }break;
         case TGUI_SLIDER:
-        {}break;
+        {
+            // TODO: sliders not implemented
+        }break;
         case TGUI_COUNT:
         {
             ASSERT(!"invalid code path");
@@ -361,6 +414,7 @@ void tgui_widget_render(TGuiHandle handle)
 {
     TGuiWidget *widget = tgui_widget_get(handle);
     TGuiV2 widget_abs_pos = tgui_widget_abs_pos(handle);
+    TGuiState *state = &tgui_global_state;
 
     switch(widget->header.type)
     {
@@ -387,9 +441,17 @@ void tgui_widget_render(TGuiHandle handle)
             
             TGuiWidgetButton *button_data = &widget->button;
             u32 color = TGUI_GREY; 
-            if(button_data->pressed)
+            if(state->focus == widget->header.handle)
+            {
+                color = TGUI_GREEN;
+            }
+            if(state->active == widget->header.handle)
             {
                 color = TGUI_ORANGE;
+            }
+            if(widget->button.pressed)
+            {
+                color = TGUI_RED;
             }
             draw_cmd.color = color;
             tgui_push_draw_command(draw_cmd);
@@ -465,7 +527,7 @@ void tgui_widget_render(TGuiHandle handle)
     }
 }
 
-void tgui_widget_recursive_descent(TGuiHandle handle, TGuiWidgetFP function)
+void tgui_widget_recursive_descent_first_to_last(TGuiHandle handle, TGuiWidgetFP function)
 {
     TGuiWidget *widget = tgui_widget_get(handle);
     while(widget)
@@ -473,9 +535,23 @@ void tgui_widget_recursive_descent(TGuiHandle handle, TGuiWidgetFP function)
         function(widget->header.handle);
         if(widget->header.child_first)
         {
-            tgui_widget_recursive_descent(widget->header.child_first, function);
+            tgui_widget_recursive_descent_first_to_last(widget->header.child_first, function);
         }
         widget = tgui_widget_get(widget->header.sibling_next);
+    }
+}
+
+void tgui_widget_recursive_descent_last_to_first(TGuiHandle handle, TGuiWidgetFP function)
+{
+    TGuiWidget *widget = tgui_widget_get(handle);
+    while(widget)
+    {
+        function(widget->header.handle);
+        if(widget->header.child_last)
+        {
+            tgui_widget_recursive_descent_last_to_first(widget->header.child_last, function);
+        }
+        widget = tgui_widget_get(widget->header.sibling_prev);
     }
 }
 
@@ -646,16 +722,10 @@ void tgui_update(void)
     state->event_queue.count = 0;
     
     // NOTE: update all widget in the state widget tree
+    state->last_focus = state->focus;
     state->focus = 0;
-    tgui_widget_recursive_descent(state->root, tgui_widget_update);
-    tgui_widget_recursive_descent(state->root, tgui_widget_render);
-    if(state->focus)
-    {
-        TGuiEventFocus button_evet = {0};
-        button_evet.type = TGUI_EVEN_FOCUS;
-        button_evet.handle = state->focus;
-        tgui_push_event((TGuiEvent)button_evet);
-    }
+    tgui_widget_recursive_descent_first_to_last(state->first_root, tgui_widget_update);
+    tgui_widget_recursive_descent_first_to_last(state->first_root, tgui_widget_render);
 }
 
 void tgui_draw_command_buffer(void)
