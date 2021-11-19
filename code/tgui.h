@@ -164,6 +164,7 @@ typedef struct TGuiDrawCommandBuffer
 typedef enum TGuiWidgetType
 {
     TGUI_CONTAINER,
+    TGUI_SCROLLCONTAINER,
     TGUI_BUTTON,
     TGUI_CHECKBOX,
     TGUI_SLIDER,
@@ -173,6 +174,7 @@ typedef enum TGuiWidgetType
 
 typedef enum TGuiLayoutType
 {
+    TGUI_LAYOUT_NONE,
     TGUI_LAYOUT_HORIZONTAL,
     TGUI_LAYOUT_VERTICAL,
     
@@ -203,6 +205,7 @@ typedef struct TGuiWidgetHeader
     TGuiHandle sibling_prev;
 
     TGuiWidgetType type;
+    TGuiWidgetLayout layout;
     TGuiV2 size;
     TGuiV2 position;
     
@@ -213,8 +216,17 @@ typedef struct TGuiWidgetContainer
     TGuiWidgetHeader header;
     //----------------------
     b32 visible;
-    TGuiWidgetLayout layout;
 } TGuiWidgetContainer;
+
+typedef struct TGuiWidgetScrollContainer
+{
+    TGuiWidgetHeader header;
+    //----------------------
+    b32 visible;
+    TGuiV2 dimension;
+    TGuiV2 grip_dimension;
+    f32 value;
+} TGuiWidgetScrollContainer;
 
 typedef struct TGuiWidgetButton
 {
@@ -238,6 +250,7 @@ typedef struct TGuiWidgetSlider
     TGuiWidgetHeader header;
     //----------------------
     f32 value;
+    f32 ratio;
     TGuiV2 grip_dimension;
 } TGuiWidgetSlider;
 
@@ -246,6 +259,7 @@ typedef union TGuiWidget
     TGuiWidgetHeader header;
     //----------------------
     TGuiWidgetContainer container;
+    TGuiWidgetScrollContainer scroll_container;
     TGuiWidgetButton button;
     TGuiWidgetCheckBox checkbox;
     TGuiWidgetSlider slider;
@@ -297,10 +311,10 @@ extern TGuiState tgui_global_state;
 //-----------------------------------------------------
 // NOTE: GUI lib functions
 //-----------------------------------------------------
-
 typedef void (*TGuiWidgetFP)(TGuiHandle handle);
 
 TGUI_API TGuiHandle tgui_create_container(TGuiLayoutType layout, b32 visible, u32 padding);
+TGUI_API TGuiHandle tgui_create_scroll_container(TGuiV2 dimension, b32 visible, u32 padding);
 TGUI_API TGuiHandle tgui_create_button(char *label);
 TGUI_API TGuiHandle tgui_create_checkbox(char *label);
 TGUI_API TGuiHandle tgui_create_slider(void);

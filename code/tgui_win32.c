@@ -157,7 +157,7 @@ int main(int argc, char** argv)
     tgui_container_add_widget(container0, slider2);
 
     TGuiHandle column1 = tgui_create_container(TGUI_LAYOUT_VERTICAL, false, 5);
-    TGuiHandle column2 = tgui_create_container(TGUI_LAYOUT_VERTICAL, true, 15);
+    TGuiHandle column2 = tgui_create_scroll_container(tgui_v2(130, 200), true, 15);
     TGuiHandle column3 = tgui_create_container(TGUI_LAYOUT_VERTICAL, false, 5);
 
     tgui_set_widget_position(column2, 20, 100);
