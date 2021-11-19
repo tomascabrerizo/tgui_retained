@@ -64,6 +64,7 @@ typedef struct TGuiBitmap
     u32 *pixels;
     u32 width;
     u32 height;
+    u32 pitch;
 } TGuiBitmap;
 
 // NOTE: for now, only support for bitmaps fonts
@@ -134,6 +135,8 @@ typedef struct TGuiEventQueue
 typedef enum TGuiDrawCommandType
 {
     TGUI_DRAWCMD_CLEAR,
+    TGUI_DRAWCMD_BEGIN_CIPPING,
+    TGUI_DRAWCMD_END_CIPPING,
     TGUI_DRAWCMD_RECT,
     TGUI_DRAWCMD_ROUNDED_RECT,
     TGUI_DRAWCMD_BITMAP,

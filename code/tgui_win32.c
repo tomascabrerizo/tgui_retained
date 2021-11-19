@@ -136,6 +136,7 @@ int main(int argc, char** argv)
     tgui_backbuffer.width = WINDOW_WIDTH;
     tgui_backbuffer.height = WINDOW_HEIGHT;
     tgui_backbuffer.pixels = (u32 *)global_backbuffer_data;
+    tgui_backbuffer.pitch = tgui_backbuffer.width * sizeof(u32);
     
     // NOTE: load bitmap for testing
     TGuiBitmap test_bitmap = tgui_debug_load_bmp("data/font.bmp");
@@ -157,7 +158,7 @@ int main(int argc, char** argv)
     tgui_container_add_widget(container0, slider2);
 
     TGuiHandle column1 = tgui_create_container(TGUI_LAYOUT_VERTICAL, false, 5);
-    TGuiHandle column2 = tgui_create_scroll_container(tgui_v2(130, 200), true, 15);
+    TGuiHandle column2 = tgui_create_scroll_container(tgui_v2(130, 260), true, 15);
     TGuiHandle column3 = tgui_create_container(TGUI_LAYOUT_VERTICAL, false, 5);
 
     tgui_set_widget_position(column2, 20, 100);

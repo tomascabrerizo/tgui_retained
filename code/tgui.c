@@ -383,6 +383,8 @@ void tgui_widget_update(TGuiHandle handle)
         widget_rect.x += widget->header.size.x; 
         widget_rect.y += (widget->scroll_container.dimension.y * widget->scroll_container.value); 
         widget_rect.dim = widget->scroll_container.grip_dimension;
+        // TODO: this could be precalculated
+        widget_rect.dim.y = (widget->scroll_container.dimension.y / widget->header.size.y) * widget->scroll_container.dimension.y;
     }
     else
     {
@@ -415,9 +417,10 @@ void tgui_widget_update(TGuiHandle handle)
                 {
                     mouse_y_rel = 0;
                 }
-                if(mouse_y_rel > 1.0f)
+                f32 y_cap = (1.0f - (widget->scroll_container.grip_dimension.y / widget->header.size.y));
+                if(mouse_y_rel > y_cap)
                 {
-                    mouse_y_rel = 1.0f;
+                    mouse_y_rel = y_cap;
                 }
                 widget->scroll_container.value = mouse_y_rel; 
             }
@@ -543,10 +546,18 @@ void tgui_widget_render(TGuiHandle handle)
             grip_cmd.descriptor.pos.x += widget->scroll_container.dimension.x; 
             grip_cmd.descriptor.pos.y += (widget->scroll_container.dimension.y * widget->scroll_container.value); 
             grip_cmd.descriptor.dim = widget->scroll_container.grip_dimension;
+            // TODO: this could be precalculated
             grip_cmd.descriptor.dim.y = (widget->scroll_container.dimension.y / widget->header.size.y) * widget->scroll_container.dimension.y;
             color = TGUI_GREY; 
             grip_cmd.color = color;
             tgui_push_draw_command(grip_cmd);
+
+
+            TGuiDrawCommand clip_cmd = {0};
+            clip_cmd.type = TGUI_DRAWCMD_BEGIN_CIPPING;
+            clip_cmd.descriptor.pos = widget_abs_pos;
+            clip_cmd.descriptor.dim = widget->scroll_container.dimension;
+            tgui_push_draw_command(clip_cmd);
         }break;
         case TGUI_BUTTON:
         {
@@ -854,6 +865,13 @@ void tgui_draw_command_buffer(void)
             {
                 tgui_clear_backbuffer(state->backbuffer);
             } break;
+            case TGUI_DRAWCMD_BEGIN_CIPPING:
+            {
+
+            } break;
+            case TGUI_DRAWCMD_END_CIPPING:
+            {
+            } break;
             case TGUI_DRAWCMD_RECT:
             {
                 i32 max_x = draw_cmd.descriptor.x + draw_cmd.descriptor.width;
@@ -1013,8 +1031,7 @@ void tgui_draw_rect(TGuiBitmap *backbuffer, i32 min_x, i32 min_y, i32 max_x, i32
     i32 width = max_x - min_x;
     i32 height = max_y - min_y;
     
-    u32 backbuffer_pitch = sizeof(u32) * backbuffer->width;
-    u8 *row = (u8 *)backbuffer->pixels + min_y * backbuffer_pitch;
+    u8 *row = (u8 *)backbuffer->pixels + min_y * backbuffer->pitch;
     for(i32 y = 0; y < height; ++y)
     {
         u32 *pixels = (u32 *)row + min_x;
@@ -1022,7 +1039,7 @@ void tgui_draw_rect(TGuiBitmap *backbuffer, i32 min_x, i32 min_y, i32 max_x, i32
         {
             *pixels++ = color;
         }
-        row += backbuffer_pitch;
+        row += backbuffer->pitch;
     }
 }
 
@@ -1054,8 +1071,7 @@ void tgui_draw_rounded_rect(TGuiBitmap *backbuffer, i32 min_x, i32 min_y, i32 ma
     i32 width = max_x - min_x;
     i32 height = max_y - min_y;
     
-    u32 backbuffer_pitch = sizeof(u32) * backbuffer->width;
-    u8 *row = (u8 *)backbuffer->pixels + min_y * backbuffer_pitch;
+    u8 *row = (u8 *)backbuffer->pixels + min_y * backbuffer->pitch;
     for(i32 y = 0; y < height; ++y)
     {
         u32 *pixels = (u32 *)row + min_x;
@@ -1124,15 +1140,13 @@ void tgui_draw_rounded_rect(TGuiBitmap *backbuffer, i32 min_x, i32 min_y, i32 ma
             
             *pixel = (255 << 24 | red << 16 | green << 8 | blue << 0);
         }
-        row += backbuffer_pitch;
+        row += backbuffer->pitch;
     }
 }
 
 void tgui_draw_circle_aa(TGuiBitmap *backbuffer, i32 x, i32 y, u32 color, u32 radius)
 {
     TGuiRect rect = tgui_rect_xywh(x - (f32)radius, y - (f32)radius, radius*2, radius*2);
-
-    u32 backbuffer_pitch = sizeof(u32) * backbuffer->width;
 
     i32 min_x = rect.x;
     i32 min_y = rect.y;
@@ -1156,7 +1170,7 @@ void tgui_draw_circle_aa(TGuiBitmap *backbuffer, i32 x, i32 y, u32 color, u32 ra
         max_y = backbuffer->height;
     }
 
-    u8 *row = (u8 *)backbuffer->pixels + min_y * backbuffer_pitch;
+    u8 *row = (u8 *)backbuffer->pixels + min_y * backbuffer->pitch;
     for(i32 pixel_y = min_y; pixel_y < max_y; ++pixel_y)
     {
         u32 *pixels = (u32 *)row + min_x;
@@ -1183,7 +1197,7 @@ void tgui_draw_circle_aa(TGuiBitmap *backbuffer, i32 x, i32 y, u32 color, u32 ra
                 *pixel = (255 << 24 | red << 16 | green << 8 | blue << 0);
             }
         }
-        row += backbuffer_pitch;
+        row += backbuffer->pitch;
     }
 }
 
@@ -1218,8 +1232,7 @@ void tgui_copy_bitmap(TGuiBitmap *backbuffer, TGuiBitmap *bitmap, i32 x, i32 y)
     i32 width = max_x - min_x;
     i32 height = max_y - min_y;
 
-    u32 backbuffer_pitch = backbuffer->width * sizeof(u32);
-    u8 *row = (u8 *)backbuffer->pixels + min_y * backbuffer_pitch;
+    u8 *row = (u8 *)backbuffer->pixels + min_y * backbuffer->pitch;
     u32 *bmp_row = bitmap->pixels + offset_y * bitmap->width;
     for(i32 y = 0; y < height; ++y)
     {
@@ -1229,7 +1242,7 @@ void tgui_copy_bitmap(TGuiBitmap *backbuffer, TGuiBitmap *bitmap, i32 x, i32 y)
         {
             *pixels++ = *bmp_pixels++;
         }
-        row += backbuffer_pitch;
+        row += backbuffer->pitch;
         bmp_row += bitmap->width;
     }
 }
@@ -1294,8 +1307,7 @@ void tgui_draw_src_dest_bitmap(TGuiBitmap *backbuffer, TGuiBitmap *bitmap, TGuiR
     i32 src_width = src_max_x - src_min_x;
     i32 src_height = src_max_y - src_min_y;
 
-    u32 backbuffer_pitch = backbuffer->width * sizeof(u32);
-    u8 *row = (u8 *)backbuffer->pixels + min_y * backbuffer_pitch;
+    u8 *row = (u8 *)backbuffer->pixels + min_y * backbuffer->pitch;
     for(i32 y = 0; y < dest_height; ++y)
     {
         f32 ratio_y = (f32)(y + offset_y) / (f32)dest.height;
@@ -1314,7 +1326,7 @@ void tgui_draw_src_dest_bitmap(TGuiBitmap *backbuffer, TGuiBitmap *bitmap, TGuiR
             }
             pixels++;
         }
-        row += backbuffer_pitch;
+        row += backbuffer->pitch;
     }
 }
 
