@@ -96,6 +96,14 @@ static inline TGuiWidget *tgui_create_widget(TGuiHandle *handle)
     return widget;
 }
 
+inline static TGuiHandle tgui_create_end_container(void)
+{
+    TGuiHandle handle = TGUI_INVALID_HANDLE;
+    TGuiWidget *widget = tgui_create_widget(&handle); 
+    widget->header.type = TGUI_END_CONTAINER;
+    return handle;
+}
+
 TGuiHandle tgui_create_container(TGuiLayoutType layout, b32 visible, u32 padding)
 {
     TGuiHandle handle = TGUI_INVALID_HANDLE;
@@ -112,7 +120,7 @@ TGuiHandle tgui_create_scroll_container(TGuiV2 dimension, b32 visible, u32 paddi
 {
     TGuiHandle handle = TGUI_INVALID_HANDLE;
     TGuiWidget *widget = tgui_create_widget(&handle); 
-    widget->header.type = TGUI_SCROLLCONTAINER;
+    widget->header.type = TGUI_SCROLL_CONTAINER;
     widget->header.size = tgui_v2(0, 0);
     widget->scroll_container.dimension = dimension;
     widget->scroll_container.header.layout.type = TGUI_LAYOUT_VERTICAL;
@@ -121,6 +129,10 @@ TGuiHandle tgui_create_scroll_container(TGuiV2 dimension, b32 visible, u32 paddi
     widget->scroll_container.grip_dimension = dimension;
     widget->scroll_container.grip_dimension.x = 20;
     widget->scroll_container.value = 0;
+
+    // NOTE: add end container widget to the last child
+    widget->header.child_last = tgui_create_end_container();
+    widget->header.child_first = widget->header.child_last;
     return handle;
 }
 
@@ -296,7 +308,7 @@ static void tgui_container_set_childs_position(TGuiWidget *container, TGuiWidget
             else
             {
                 widget->header.position.y = container->header.layout.padding;
-                if(container->header.type == TGUI_SCROLLCONTAINER)
+                if(container->header.type == TGUI_SCROLL_CONTAINER)
                 {
                     widget->header.position.y -= (container->scroll_container.value * container->header.size.y);
                 }
@@ -334,7 +346,7 @@ static void tgui_container_recalculate_widget_position(TGuiWidget *container)
 void tgui_container_add_widget(TGuiHandle container_handle, TGuiHandle widget_handle)
 {
     TGuiWidget *container = tgui_widget_get(container_handle);
-    if(container->header.type == TGUI_CONTAINER || container->header.type == TGUI_SCROLLCONTAINER)
+    if(container->header.type == TGUI_CONTAINER || container->header.type == TGUI_SCROLL_CONTAINER)
     {
         TGuiWidget *widget = tgui_widget_get(widget_handle);
         
@@ -378,7 +390,7 @@ void tgui_widget_update(TGuiHandle handle)
         widget_rect.x += (widget->slider.value * widget->header.size.x) - (widget->slider.grip_dimension.x*0.5f); 
         widget_rect.dim = widget->slider.grip_dimension;
     }
-    else if(widget->header.type == TGUI_SCROLLCONTAINER)
+    else if(widget->header.type == TGUI_SCROLL_CONTAINER)
     {
         widget_rect.x += widget->header.size.x; 
         widget_rect.y += (widget->scroll_container.dimension.y * widget->scroll_container.value); 
@@ -404,7 +416,7 @@ void tgui_widget_update(TGuiHandle handle)
     {
         case TGUI_CONTAINER:
         {}break;
-        case TGUI_SCROLLCONTAINER:
+        case TGUI_SCROLL_CONTAINER:
         {
             f32 mouse_y_rel = (mouse.y - widget_abs_pos.y) / widget->scroll_container.dimension.y;
             if(is_focus && state->mouse_is_down)
@@ -431,6 +443,8 @@ void tgui_widget_update(TGuiHandle handle)
             // TODO: check how and where to update the position
             tgui_container_recalculate_widget_position(widget);
         }break;
+        case TGUI_END_CONTAINER:
+        {}break;
         case TGUI_BUTTON:
         {
             widget->button.pressed = false;
@@ -517,7 +531,7 @@ void tgui_widget_render(TGuiHandle handle)
             draw_cmd.color = color;
             tgui_push_draw_command(draw_cmd);
         } break;
-        case TGUI_SCROLLCONTAINER:
+        case TGUI_SCROLL_CONTAINER:
         {
             TGuiWidgetContainer *container_data = &widget->container;
             if(!container_data->visible) return;
@@ -546,19 +560,27 @@ void tgui_widget_render(TGuiHandle handle)
             grip_cmd.descriptor.pos.x += widget->scroll_container.dimension.x; 
             grip_cmd.descriptor.pos.y += (widget->scroll_container.dimension.y * widget->scroll_container.value); 
             grip_cmd.descriptor.dim = widget->scroll_container.grip_dimension;
-            // TODO: this could be precalculated
-            grip_cmd.descriptor.dim.y = (widget->scroll_container.dimension.y / widget->header.size.y) * widget->scroll_container.dimension.y;
+            // TODO: watch the division by zero
+            if(widget->header.size.y)
+            {
+                // TODO: this could be precalculated
+                grip_cmd.descriptor.dim.y = (widget->scroll_container.dimension.y / widget->header.size.y) * widget->scroll_container.dimension.y;
+            }
             color = TGUI_GREY; 
             grip_cmd.color = color;
             tgui_push_draw_command(grip_cmd);
 
-
-            TGuiDrawCommand clip_cmd = {0};
-            clip_cmd.type = TGUI_DRAWCMD_BEGIN_CIPPING;
-            clip_cmd.descriptor.pos = widget_abs_pos;
-            clip_cmd.descriptor.dim = widget->scroll_container.dimension;
-            tgui_push_draw_command(clip_cmd);
+            TGuiDrawCommand start_clip_cmd = {0};
+            start_clip_cmd.type = TGUI_DRAWCMD_START_CLIPPING;
+            start_clip_cmd.descriptor = draw_cmd.descriptor;
+            tgui_push_draw_command(start_clip_cmd);
         }break;
+        case TGUI_END_CONTAINER:
+        {
+            TGuiDrawCommand end_clip_cmd = {0};
+            end_clip_cmd.type = TGUI_DRAWCMD_END_CLIPPING;
+            tgui_push_draw_command(end_clip_cmd);
+        } break;
         case TGUI_BUTTON:
         {
             TGuiDrawCommand draw_cmd = {0};
@@ -639,7 +661,7 @@ void tgui_widget_render(TGuiHandle handle)
             draw_cmd.type = TGUI_DRAWCMD_ROUNDED_RECT;
             draw_cmd.descriptor.pos = widget_abs_pos;
             draw_cmd.descriptor.dim = slider_data->grip_dimension;
-            draw_cmd.descriptor.x += (slider_data->value*widget->header.size.x) - (0.5f*widget->slider.grip_dimension.x);
+            draw_cmd.descriptor.x += (slider_data->value * widget->header.size.x) - (0.5f*widget->slider.grip_dimension.x);
             draw_cmd.ratio = 4;
             draw_cmd.color = TGUI_GREY;
             tgui_push_draw_command(draw_cmd);
@@ -789,6 +811,7 @@ void tgui_init(TGuiBitmap *backbuffer, TGuiFont *font)
     state->font = font;
     state->font_height = 9;
     tgui_widget_poll_allocator_init(&state->widget_allocator);
+    state->current_clipping = tgui_rect_xywh(0, 0, backbuffer->width, backbuffer->height);
 }
 
 void tgui_update(void)
@@ -852,6 +875,59 @@ void tgui_update(void)
     tgui_widget_recursive_descent_first_to_last(state->first_root, tgui_widget_render);
 }
 
+typedef struct TGuiClipResult
+{
+    TGuiRect dest;
+    TGuiRect src;
+} TGuiClipResult;
+
+static TGuiClipResult tgui_clip_rect(TGuiRect dest, TGuiRect src, TGuiRect clipping)
+{
+    i32 min_x = (i32)dest.x;
+    i32 min_y = (i32)dest.y;
+    i32 max_x = min_x + (i32)dest.width;
+    i32 max_y = min_y + (i32)dest.height;
+
+    i32 clip_min_x = (i32)clipping.x;
+    i32 clip_min_y = (i32)clipping.y;
+    i32 clip_max_x = clip_min_x + (i32)clipping.width;
+    i32 clip_max_y = clip_min_y + (i32)clipping.height;
+     
+    i32 offset_x = 0;
+    i32 offset_y = 0;
+    if(min_x < clip_min_x)
+    {
+        offset_x = (clip_min_x - min_x);
+        min_x = clip_min_x;
+    }
+    if(max_x > clip_max_x)
+    {
+        max_x = clip_max_x;
+    }
+    if(min_y < clip_min_y)
+    {
+        offset_y = (clip_min_y - min_y);
+        min_y = clip_min_y;
+    }
+    if(max_y > clip_max_y)
+    {
+        max_y = clip_max_y;
+    }
+
+    TGuiClipResult result = {0};
+    result.dest.x = min_x;
+    result.dest.y = min_y;
+    result.dest.width = (max_x - min_x);
+    result.dest.height = (max_y - min_y);
+    
+    result.src.x = src.x + offset_x;
+    result.src.y = src.y + offset_y;
+    result.src.width = src.width - offset_x;
+    result.src.height = src.height - offset_y;
+
+    return result;
+}
+
 void tgui_draw_command_buffer(void)
 {
     TGuiState *state = &tgui_global_state;
@@ -865,18 +941,24 @@ void tgui_draw_command_buffer(void)
             {
                 tgui_clear_backbuffer(state->backbuffer);
             } break;
-            case TGUI_DRAWCMD_BEGIN_CIPPING:
+            case TGUI_DRAWCMD_START_CLIPPING:
             {
-
+                state->current_clipping = draw_cmd.descriptor;
             } break;
-            case TGUI_DRAWCMD_END_CIPPING:
+            case TGUI_DRAWCMD_END_CLIPPING:
             {
+                state->current_clipping = tgui_rect_xywh(0, 0, state->backbuffer->width, state->backbuffer->height);
             } break;
             case TGUI_DRAWCMD_RECT:
             {
-                i32 max_x = draw_cmd.descriptor.x + draw_cmd.descriptor.width;
-                i32 max_y = draw_cmd.descriptor.y + draw_cmd.descriptor.height;
-                tgui_draw_rect(state->backbuffer, draw_cmd.descriptor.x, draw_cmd.descriptor.y, max_x, max_y, draw_cmd.color);
+                TGuiRect src_rect = (TGuiRect){0};
+                TGuiClipResult result = tgui_clip_rect(draw_cmd.descriptor, src_rect, state->current_clipping);
+                TGuiRect clip_rect = result.dest;
+                u32 min_x = (u32)clip_rect.x;
+                u32 min_y = (u32)clip_rect.y;
+                u32 max_x = min_x + (u32)clip_rect.width;
+                u32 max_y = min_y + (u32)clip_rect.height;
+                tgui_draw_rect(state->backbuffer, min_x, min_y, max_x, max_y, draw_cmd.color);
             } break;
             case TGUI_DRAWCMD_ROUNDED_RECT:
             {

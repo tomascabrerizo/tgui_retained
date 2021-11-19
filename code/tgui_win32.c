@@ -149,7 +149,7 @@ int main(int argc, char** argv)
     TGuiHandle container = tgui_create_container(TGUI_LAYOUT_HORIZONTAL, false, 0);
     TGuiHandle container0 = tgui_create_container(TGUI_LAYOUT_VERTICAL, true, 10);
 
-    tgui_set_widget_position(container0, 200, 100);
+    tgui_set_widget_position(container0, 300, 350);
     tgui_container_add_widget(container0, container);
     
     TGuiHandle slider = tgui_create_slider();
@@ -161,9 +161,12 @@ int main(int argc, char** argv)
     TGuiHandle column2 = tgui_create_scroll_container(tgui_v2(130, 260), true, 15);
     TGuiHandle column3 = tgui_create_container(TGUI_LAYOUT_VERTICAL, false, 5);
 
+    TGuiHandle new_container = tgui_create_scroll_container(tgui_v2(220, 200), true, 15);
+    tgui_set_widget_position(new_container, 300, 50);
     tgui_set_widget_position(column2, 20, 100);
-    tgui_widget_to_root(column2);
+    tgui_widget_to_root(new_container);
     tgui_widget_to_root(container0);
+    tgui_widget_to_root(column2);
 
     tgui_container_add_widget(container, column1);
     tgui_container_add_widget(container, column3);

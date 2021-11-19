@@ -135,8 +135,8 @@ typedef struct TGuiEventQueue
 typedef enum TGuiDrawCommandType
 {
     TGUI_DRAWCMD_CLEAR,
-    TGUI_DRAWCMD_BEGIN_CIPPING,
-    TGUI_DRAWCMD_END_CIPPING,
+    TGUI_DRAWCMD_START_CLIPPING,
+    TGUI_DRAWCMD_END_CLIPPING,
     TGUI_DRAWCMD_RECT,
     TGUI_DRAWCMD_ROUNDED_RECT,
     TGUI_DRAWCMD_BITMAP,
@@ -167,7 +167,8 @@ typedef struct TGuiDrawCommandBuffer
 typedef enum TGuiWidgetType
 {
     TGUI_CONTAINER,
-    TGUI_SCROLLCONTAINER,
+    TGUI_SCROLL_CONTAINER,
+    TGUI_END_CONTAINER,
     TGUI_BUTTON,
     TGUI_CHECKBOX,
     TGUI_SLIDER,
@@ -211,6 +212,7 @@ typedef struct TGuiWidgetHeader
     TGuiWidgetLayout layout;
     TGuiV2 size;
     TGuiV2 position;
+    TGuiRect clipping;
     
 } TGuiWidgetHeader;
 
@@ -286,6 +288,8 @@ typedef struct TGuiWidgetPoolAllocator
 typedef struct TGuiState
 {
     TGuiBitmap *backbuffer;
+    // TODO: the clipping rects need to be a stack
+    TGuiRect current_clipping;
     TGuiFont *font;
     u32 font_height;
 
