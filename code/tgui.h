@@ -288,8 +288,7 @@ typedef struct TGuiWidgetPoolAllocator
 typedef struct TGuiState
 {
     TGuiBitmap *backbuffer;
-    // TODO: the clipping rects need to be a stack
-    TGuiRect current_clipping;
+    
     TGuiFont *font;
     u32 font_height;
 
@@ -338,8 +337,8 @@ TGuiV2 tgui_widget_abs_pos(TGuiHandle handle);
 //-----------------------------------------------------
 // NOTE: core lib functions
 //-----------------------------------------------------
-// TODO: create tgui_destroy(void) function
 TGUI_API void tgui_init(TGuiBitmap *backbuffer, TGuiFont *font);
+TGUI_API void tgui_destroy(void);
 TGUI_API void tgui_update(void);
 TGUI_API void tgui_draw_command_buffer(void);
 TGUI_API void tgui_push_event(TGuiEvent event);
@@ -350,6 +349,7 @@ TGUI_API b32 tgui_pull_draw_command(TGuiDrawCommand *draw_cmd);
 //  NOTE: memory management functions
 //-----------------------------------------------------
 void tgui_widget_allocator_init(TGuiWidgetPoolAllocator *allocator);
+void tgui_widget_allocator_destroy(TGuiWidgetPoolAllocator *allocator);
 TGuiHandle tgui_widget_allocator_alloc(TGuiWidgetPoolAllocator *allocator);
 void tgui_widget_allocator_free(TGuiWidgetPoolAllocator *allocator, TGuiHandle *handle);
 void tgui_widget_set(TGuiHandle handle, TGuiWidget widget);
@@ -367,6 +367,23 @@ void tgui_debug_free_bmp(TGuiBitmap *bitmap);
 //-----------------------------------------------------
 // NOTE: simple render API function
 //-----------------------------------------------------
+
+#define TGUI_DEFAULT_CLIPPING_STACK_SIZE 4
+typedef struct TGuiClippingStack
+{
+    TGuiRect *buffer;
+    u32 buffer_size;
+    u32 top;
+} TGuiClippingStack;
+void tgui_clipping_stack_init(TGuiClippingStack *stack);
+void tgui_clipping_stack_destoy(TGuiClippingStack *stack);
+void tgui_clipping_stack_push(TGuiClippingStack *stack, TGuiRect clipping);
+TGuiRect tgui_clipping_stack_pop(TGuiClippingStack *stack);
+TGuiRect tgui_clipping_stack_top(TGuiClippingStack *stack);
+
+// TODO: maybe create a renderer struct to save info like this
+extern TGuiClippingStack global_clipping_stack;
+
 TGUI_API void tgui_clear_backbuffer(TGuiBitmap *backbuffer);
 TGUI_API void tgui_draw_circle_aa(TGuiBitmap *backbuffer, i32 x, i32 y, u32 color, u32 radius);
 TGUI_API void tgui_draw_rect(TGuiBitmap *backbuffer, i32 min_x, i32 min_y, i32 max_x, i32 max_y, u32 color);

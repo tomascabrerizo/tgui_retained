@@ -35,6 +35,11 @@ static void win32_create_backbuffer(HDC device)
     SelectObject(global_backbuffer_dc, global_bitmap);
 }
 
+static void win32_destroy_backbuffer(void)
+{
+    VirtualFree(global_backbuffer_data, 0, MEM_RELEASE);
+}
+
 static LRESULT win32_window_proc(HWND window, UINT message, WPARAM w_param, LPARAM l_param)
 {
     LRESULT result = 0;
@@ -256,7 +261,9 @@ int main(int argc, char** argv)
         BitBlt(global_device_context, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, global_backbuffer_dc, 0, 0, SRCCOPY);
     }
     
+    tgui_destroy();
     tgui_debug_free_bmp(&test_bitmap);
+    win32_destroy_backbuffer();
 
     return 0;
 }

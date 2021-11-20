@@ -7,4 +7,4 @@ set linker_flags=-lkernel32 -luser32 -lgdi32
 set defines=-D_DEBUG -D_CRT_SECURE_NO_WARNINGS
 set include_path=code/
 
-clang code/tgui_win32.c -o build/tgui.exe -I%include_path% %compiler_flags% %defines% %linker_flags%
+clang code/tgui_win32.c -o build/tgui.exe -I%include_path% %compiler_flags% %defines% %linker_flags% -fsanitize=address

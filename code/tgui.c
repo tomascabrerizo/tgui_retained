@@ -9,6 +9,9 @@
 // TODO: Maybe the state should be provided by the application?
 TGuiState tgui_global_state;
 
+// TODO: maybe create a renderer struct to save info like this
+TGuiClippingStack global_clipping_stack;
+
 //-----------------------------------------------------
 //  NOTE: inline math functions
 //-----------------------------------------------------
@@ -705,12 +708,71 @@ void tgui_widget_recursive_descent_last_to_first(TGuiHandle handle, TGuiWidgetFP
 //  NOTE: memory management functions
 //-----------------------------------------------------
 
+// TODO: move clipping stack to software rendering code
+void tgui_clipping_stack_init(TGuiClippingStack *stack)
+{
+    stack->buffer_size = TGUI_DEFAULT_CLIPPING_STACK_SIZE;
+    stack->buffer = (TGuiRect *)malloc(stack->buffer_size*sizeof(TGuiRect));
+    stack->top = 0;
+}
+
+void tgui_clipping_stack_destoy(TGuiClippingStack *stack)
+{
+    free(stack->buffer);
+    stack->buffer = 0;
+    stack->buffer_size = 0;
+    stack->top = 0;
+}
+
+void tgui_clipping_stack_push(TGuiClippingStack *stack, TGuiRect clipping)
+{
+    if(stack->top == stack->buffer_size)
+    {
+        u32 new_buffer_size = stack->buffer_size * 2;
+        TGuiRect *new_buffer = (TGuiRect *)malloc(new_buffer_size*sizeof(TGuiRect));
+        memcpy(new_buffer, stack->buffer, stack->buffer_size*sizeof(TGuiRect));
+        free(stack->buffer);
+        stack->buffer = new_buffer;
+        stack->buffer_size = new_buffer_size;
+    }
+
+    stack->buffer[stack->top++] = clipping;
+}
+
+TGuiRect tgui_clipping_stack_pop(TGuiClippingStack *stack)
+{
+    TGuiRect result = (TGuiRect){0};
+    if(stack->top > 0)
+    {
+        result = stack->buffer[--stack->top];
+    }
+    return result;
+}
+
+TGuiRect tgui_clipping_stack_top(TGuiClippingStack *stack)
+{
+    TGuiRect result = (TGuiRect){0};
+    if(stack->top > 0)
+    {
+        result = stack->buffer[stack->top - 1];
+    }
+    return result;
+}
+
 void tgui_widget_poll_allocator_init(TGuiWidgetPoolAllocator *allocator)
 {
     allocator->buffer_size = TGUI_DEFAULT_POOL_SIZE;
     allocator->buffer = (TGuiWidget *)malloc(allocator->buffer_size*sizeof(TGuiWidget));
     // NOTE: because 0 is a INVALID HANDLE the first element in the pool is reserved
     allocator->count = 1;
+    allocator->free_list = 0;
+}
+
+void tgui_widget_allocator_destroy(TGuiWidgetPoolAllocator *allocator)
+{
+    free(allocator->buffer);
+    allocator->buffer_size = 0;
+    allocator->count = 0;
     allocator->free_list = 0;
 }
 
@@ -810,8 +872,18 @@ void tgui_init(TGuiBitmap *backbuffer, TGuiFont *font)
     state->backbuffer = backbuffer;
     state->font = font;
     state->font_height = 9;
+    
     tgui_widget_poll_allocator_init(&state->widget_allocator);
-    state->current_clipping = tgui_rect_xywh(0, 0, backbuffer->width, backbuffer->height);
+    
+    tgui_clipping_stack_init(&global_clipping_stack);
+    tgui_clipping_stack_push(&global_clipping_stack, tgui_rect_xywh(0, 0, backbuffer->width, backbuffer->height));
+}
+
+void tgui_destroy(void)
+{
+    TGuiState *state = &tgui_global_state;
+    tgui_clipping_stack_destoy(&global_clipping_stack);
+    tgui_widget_allocator_destroy(&state->widget_allocator);
 }
 
 void tgui_update(void)
@@ -875,59 +947,6 @@ void tgui_update(void)
     tgui_widget_recursive_descent_first_to_last(state->first_root, tgui_widget_render);
 }
 
-typedef struct TGuiClipResult
-{
-    TGuiRect dest;
-    TGuiRect src;
-} TGuiClipResult;
-
-static TGuiClipResult tgui_clip_rect(TGuiRect dest, TGuiRect src, TGuiRect clipping)
-{
-    i32 min_x = (i32)dest.x;
-    i32 min_y = (i32)dest.y;
-    i32 max_x = min_x + (i32)dest.width;
-    i32 max_y = min_y + (i32)dest.height;
-
-    i32 clip_min_x = (i32)clipping.x;
-    i32 clip_min_y = (i32)clipping.y;
-    i32 clip_max_x = clip_min_x + (i32)clipping.width;
-    i32 clip_max_y = clip_min_y + (i32)clipping.height;
-     
-    i32 offset_x = 0;
-    i32 offset_y = 0;
-    if(min_x < clip_min_x)
-    {
-        offset_x = (clip_min_x - min_x);
-        min_x = clip_min_x;
-    }
-    if(max_x > clip_max_x)
-    {
-        max_x = clip_max_x;
-    }
-    if(min_y < clip_min_y)
-    {
-        offset_y = (clip_min_y - min_y);
-        min_y = clip_min_y;
-    }
-    if(max_y > clip_max_y)
-    {
-        max_y = clip_max_y;
-    }
-
-    TGuiClipResult result = {0};
-    result.dest.x = min_x;
-    result.dest.y = min_y;
-    result.dest.width = (max_x - min_x);
-    result.dest.height = (max_y - min_y);
-    
-    result.src.x = src.x + offset_x;
-    result.src.y = src.y + offset_y;
-    result.src.width = src.width - offset_x;
-    result.src.height = src.height - offset_y;
-
-    return result;
-}
-
 void tgui_draw_command_buffer(void)
 {
     TGuiState *state = &tgui_global_state;
@@ -943,21 +962,18 @@ void tgui_draw_command_buffer(void)
             } break;
             case TGUI_DRAWCMD_START_CLIPPING:
             {
-                state->current_clipping = draw_cmd.descriptor;
+                tgui_clipping_stack_push(&global_clipping_stack, draw_cmd.descriptor);
             } break;
             case TGUI_DRAWCMD_END_CLIPPING:
             {
-                state->current_clipping = tgui_rect_xywh(0, 0, state->backbuffer->width, state->backbuffer->height);
+                tgui_clipping_stack_pop(&global_clipping_stack);
             } break;
             case TGUI_DRAWCMD_RECT:
             {
-                TGuiRect src_rect = (TGuiRect){0};
-                TGuiClipResult result = tgui_clip_rect(draw_cmd.descriptor, src_rect, state->current_clipping);
-                TGuiRect clip_rect = result.dest;
-                u32 min_x = (u32)clip_rect.x;
-                u32 min_y = (u32)clip_rect.y;
-                u32 max_x = min_x + (u32)clip_rect.width;
-                u32 max_y = min_y + (u32)clip_rect.height;
+                u32 min_x = (u32)draw_cmd.descriptor.x;
+                u32 min_y = (u32)draw_cmd.descriptor.y;
+                u32 max_x = min_x + (u32)draw_cmd.descriptor.width;
+                u32 max_y = min_y + (u32)draw_cmd.descriptor.height;
                 tgui_draw_rect(state->backbuffer, min_x, min_y, max_x, max_y, draw_cmd.color);
             } break;
             case TGUI_DRAWCMD_ROUNDED_RECT:
@@ -1091,32 +1107,65 @@ void tgui_clear_backbuffer(TGuiBitmap *backbuffer)
 // NOTE: simple rendering API
 //-----------------------------------------------------
 
-void tgui_draw_rect(TGuiBitmap *backbuffer, i32 min_x, i32 min_y, i32 max_x, i32 max_y, u32 color)
+typedef struct TGuiClipResult
 {
-    if(min_x < 0)
+    i32 min_x; 
+    i32 min_y; 
+    i32 max_x; 
+    i32 max_y; 
+    i32 offset_x;
+    i32 offset_y;
+} TGuiClipResult;
+
+static TGuiClipResult tgui_clip_rect(i32 min_x, i32 min_y, i32 max_x, i32 max_y, TGuiRect clipping)
+{
+    i32 clip_min_x = (i32)clipping.x;
+    i32 clip_min_y = (i32)clipping.y;
+    i32 clip_max_x = clip_min_x + (i32)clipping.width;
+    i32 clip_max_y = clip_min_y + (i32)clipping.height;
+     
+    i32 offset_x = 0;
+    i32 offset_y = 0;
+    if(min_x < clip_min_x)
     {
-        min_x = 0;
+        offset_x = -(min_x - clip_min_x);
+        min_x = clip_min_x;
     }
-    if(max_x > (i32)backbuffer->width)
+    if(max_x > clip_max_x)
     {
-        max_x = backbuffer->width;
+        max_x = clip_max_x;
     }
-    if(min_y < 0)
+    if(min_y < clip_min_y)
     {
-        min_y = 0;
+        offset_y = -(min_y - clip_min_y);
+        min_y = clip_min_y;
     }
-    if(max_y > (i32)backbuffer->height)
+    if(max_y > clip_max_y)
     {
-        max_y = backbuffer->height;
+        max_y = clip_max_y;
     }
 
-    i32 width = max_x - min_x;
-    i32 height = max_y - min_y;
+    TGuiClipResult result = {0};
+    result.min_x = min_x;
+    result.min_y = min_y;
+    result.max_x = max_x;
+    result.max_y = max_y;
     
-    u8 *row = (u8 *)backbuffer->pixels + min_y * backbuffer->pitch;
+    result.offset_x = offset_x;
+    result.offset_y = offset_y;
+    
+    return result;
+}
+
+void tgui_draw_rect(TGuiBitmap *backbuffer, i32 min_x, i32 min_y, i32 max_x, i32 max_y, u32 color)
+{
+    TGuiClipResult clipping = tgui_clip_rect(min_x, min_y, max_x, max_y, tgui_clipping_stack_top(&global_clipping_stack));
+    i32 width = clipping.max_x - clipping.min_x;
+    i32 height = clipping.max_y - clipping.min_y;
+    u8 *row = (u8 *)backbuffer->pixels + clipping.min_y * backbuffer->pitch;
     for(i32 y = 0; y < height; ++y)
     {
-        u32 *pixels = (u32 *)row + min_x;
+        u32 *pixels = (u32 *)row + clipping.min_x;
         for(i32 x = 0; x < width; ++x)
         {
             *pixels++ = color;
@@ -1133,36 +1182,20 @@ void tgui_draw_rounded_rect(TGuiBitmap *backbuffer, i32 min_x, i32 min_y, i32 ma
     TGuiRect bottom_right = tgui_rect_xywh(max_x - diameter, max_y - diameter, diameter, diameter);
     TGuiRect bottom_left = tgui_rect_xywh(min_x, max_y - diameter, diameter, diameter);
 
-    if(min_x < 0)
-    {
-        min_x = 0;
-    }
-    if(max_x > (i32)backbuffer->width)
-    {
-        max_x = backbuffer->width;
-    }
-    if(min_y < 0)
-    {
-        min_y = 0;
-    }
-    if(max_y > (i32)backbuffer->height)
-    {
-        max_y = backbuffer->height;
-    }
-
-    i32 width = max_x - min_x;
-    i32 height = max_y - min_y;
+    TGuiClipResult clipping = tgui_clip_rect(min_x, min_y, max_x, max_y, tgui_clipping_stack_top(&global_clipping_stack));
+    i32 width = clipping.max_x - clipping.min_x;
+    i32 height = clipping.max_y - clipping.min_y;
     
-    u8 *row = (u8 *)backbuffer->pixels + min_y * backbuffer->pitch;
+    u8 *row = (u8 *)backbuffer->pixels + clipping.min_y * backbuffer->pitch;
     for(i32 y = 0; y < height; ++y)
     {
-        u32 *pixels = (u32 *)row + min_x;
+        u32 *pixels = (u32 *)row + clipping.min_x;
         for(i32 x = 0; x < width; ++x)
         {
             u32 *pixel = pixels++;
             f32 alpha = 1.0f;
             
-            TGuiV2 pos = tgui_v2(x + min_x, y + min_y);
+            TGuiV2 pos = tgui_v2(x + clipping.min_x, y + clipping.min_y);
             if(tgui_point_inside_rect(pos, top_left))
             {
                 TGuiV2 center = tgui_v2(top_left.x + radius, top_left.y + radius);
@@ -1229,28 +1262,11 @@ void tgui_draw_rounded_rect(TGuiBitmap *backbuffer, i32 min_x, i32 min_y, i32 ma
 void tgui_draw_circle_aa(TGuiBitmap *backbuffer, i32 x, i32 y, u32 color, u32 radius)
 {
     TGuiRect rect = tgui_rect_xywh(x - (f32)radius, y - (f32)radius, radius*2, radius*2);
-
-    i32 min_x = rect.x;
-    i32 min_y = rect.y;
-    i32 max_x = min_x + rect.width;
-    i32 max_y = min_y + rect.height;
-
-    if(min_x < 0)
-    {
-        min_x = 0;
-    }
-    if(max_x > (i32)backbuffer->width)
-    {
-        max_x = backbuffer->width;
-    }
-    if(min_y < 0)
-    {
-        min_y = 0;
-    }
-    if(max_y > (i32)backbuffer->height)
-    {
-        max_y = backbuffer->height;
-    }
+    TGuiClipResult clipping = tgui_clip_rect(rect.x, rect.y, rect.x + rect.width, rect.y + rect.height, tgui_clipping_stack_top(&global_clipping_stack));
+    i32 min_x = clipping.min_x;
+    i32 min_y = clipping.min_y;
+    i32 max_x = clipping.max_x;
+    i32 max_y = clipping.max_y;
 
     u8 *row = (u8 *)backbuffer->pixels + min_y * backbuffer->pitch;
     for(i32 pixel_y = min_y; pixel_y < max_y; ++pixel_y)
@@ -1290,36 +1306,16 @@ void tgui_copy_bitmap(TGuiBitmap *backbuffer, TGuiBitmap *bitmap, i32 x, i32 y)
     i32 max_x = min_x + bitmap->width;
     i32 max_y = min_y + bitmap->height;
      
-    u32 offset_x = 0;
-    u32 offset_y = 0;
-    if(min_x < 0)
-    {
-        offset_x = -min_x;
-        min_x = 0;
-    }
-    if(max_x > (i32)backbuffer->width)
-    {
-        max_x = backbuffer->width;
-    }
-    if(min_y < 0)
-    {
-        offset_y = -min_y;
-        min_y = 0;
-    }
-    if(max_y > (i32)backbuffer->height)
-    {
-        max_y = backbuffer->height;
-    }
+    TGuiClipResult clipping = tgui_clip_rect(min_x, min_y, max_x, max_y, tgui_clipping_stack_top(&global_clipping_stack));
+    i32 width = clipping.max_x - clipping.min_x;
+    i32 height = clipping.max_y - clipping.min_y;
 
-    i32 width = max_x - min_x;
-    i32 height = max_y - min_y;
-
-    u8 *row = (u8 *)backbuffer->pixels + min_y * backbuffer->pitch;
-    u32 *bmp_row = bitmap->pixels + offset_y * bitmap->width;
+    u8 *row = (u8 *)backbuffer->pixels + clipping.min_y * backbuffer->pitch;
+    u32 *bmp_row = bitmap->pixels + clipping.offset_y * bitmap->width;
     for(i32 y = 0; y < height; ++y)
     {
-        u32 *pixels = (u32 *)row + min_x;
-        u32 *bmp_pixels = bmp_row + offset_x;
+        u32 *pixels = (u32 *)row + clipping.min_x;
+        u32 *bmp_pixels = bmp_row + clipping.offset_x;
         for(i32 x = 0; x < width; ++x)
         {
             *pixels++ = *bmp_pixels++;
@@ -1339,65 +1335,27 @@ void tgui_draw_src_dest_bitmap(TGuiBitmap *backbuffer, TGuiBitmap *bitmap, TGuiR
     i32 max_x = min_x + dest.width;
     i32 max_y = min_y + dest.height;
      
-    u32 offset_x = 0;
-    u32 offset_y = 0;
-    if(min_x < 0)
-    {
-        offset_x = -min_x;
-        min_x = 0;
-    }
-    if(max_x > (i32)backbuffer->width)
-    {
-        max_x = backbuffer->width;
-    }
-    if(min_y < 0)
-    {
-        offset_y = -min_y;
-        min_y = 0;
-    }
-    if(max_y > (i32)backbuffer->height)
-    {
-        max_y = backbuffer->height;
-    }
+    TGuiClipResult clipping = tgui_clip_rect(min_x, min_y, max_x, max_y, tgui_clipping_stack_top(&global_clipping_stack));
+    i32 dest_width = clipping.max_x - clipping.min_x;
+    i32 dest_height = clipping.max_y - clipping.min_y;
     
-    // TODO: this clipping is not necessary, the src rect should always be correct
-    // NOTE: clip src rect to the bitmap
     i32 src_min_x = src.x;
     i32 src_min_y = src.y;
     i32 src_max_x = src_min_x + src.width;
     i32 src_max_y = src_min_y + src.height;
      
-    if(src_min_x < 0)
-    {
-        src_min_x = 0;
-    }
-    if(src_max_x > (i32)bitmap->width)
-    {
-        src_max_x = bitmap->width;
-    }
-    if(src_min_y < 0)
-    {
-        src_min_y = 0;
-    }
-    if(src_max_y > (i32)bitmap->height)
-    {
-        src_max_y = bitmap->height;
-    }
-    
-    i32 dest_width = max_x - min_x;
-    i32 dest_height = max_y - min_y;
     i32 src_width = src_max_x - src_min_x;
     i32 src_height = src_max_y - src_min_y;
 
-    u8 *row = (u8 *)backbuffer->pixels + min_y * backbuffer->pitch;
+    u8 *row = (u8 *)backbuffer->pixels + clipping.min_y * backbuffer->pitch;
     for(i32 y = 0; y < dest_height; ++y)
     {
-        f32 ratio_y = (f32)(y + offset_y) / (f32)dest.height;
+        f32 ratio_y = (f32)(y + clipping.offset_y) / (f32)dest.height;
         u32 bitmap_y = src_min_y + (u32)((f32)src_height * ratio_y + 0.5f);
-        u32 *pixels = (u32 *)row + min_x;
+        u32 *pixels = (u32 *)row + clipping.min_x;
         for(i32 x = 0; x < dest_width; ++x)
         {
-            f32 ratio_x = (f32)(x + offset_x) / (f32)dest.width;
+            f32 ratio_x = (f32)(x + clipping.offset_x) / (f32)dest.width;
             u32 bitmap_x = src_min_x + (u32)((f32)src_width * ratio_x + 0.5f);
             u32 src_color = bitmap->pixels[bitmap_y*bitmap->width + bitmap_x];
             // TODO: implements real alpha bending
