@@ -91,7 +91,7 @@ static b32 tgui_point_inside_rect(TGuiV2 point, TGuiRect rect)
 static inline TGuiWidget *tgui_create_widget(TGuiHandle *handle)
 {
     TGuiState *state = &tgui_global_state;
-    *handle = tgui_widget_allocator_alloc(&state->widget_allocator);
+    *handle = tgui_widget_allocator_pool(&state->widget_allocator);
     TGuiWidget *widget = tgui_widget_get(*handle);
     memset(widget, 0, sizeof(TGuiWidget));
     widget->header.handle = *handle;
@@ -304,7 +304,7 @@ static void tgui_container_set_childs_position(TGuiWidget *container, TGuiWidget
         if(container->header.layout.type == TGUI_LAYOUT_VERTICAL)
         {
             widget->header.position.x = container->header.layout.padding;
-            if(widget_next) 
+            if(widget->header.handle != container->header.child_last) 
             {
                 widget->header.position.y = widget_next->header.position.y + widget_next->header.size.y + container->header.layout.padding;
             }
@@ -313,6 +313,8 @@ static void tgui_container_set_childs_position(TGuiWidget *container, TGuiWidget
                 widget->header.position.y = container->header.layout.padding;
                 if(container->header.type == TGUI_SCROLL_CONTAINER)
                 {
+                    // TODO: fix this padding bug
+                    widget->header.position.y = 0;
                     widget->header.position.y -= (container->scroll_container.value * container->header.size.y);
                 }
             }
@@ -709,7 +711,7 @@ void tgui_widget_recursive_descent_last_to_first(TGuiHandle handle, TGuiWidgetFP
 //-----------------------------------------------------
 
 // TODO: move clipping stack to software rendering code
-void tgui_clipping_stack_init(TGuiClippingStack *stack)
+void tgui_clipping_stack_create(TGuiClippingStack *stack)
 {
     stack->buffer_size = TGUI_DEFAULT_CLIPPING_STACK_SIZE;
     stack->buffer = (TGuiRect *)malloc(stack->buffer_size*sizeof(TGuiRect));
@@ -759,7 +761,7 @@ TGuiRect tgui_clipping_stack_top(TGuiClippingStack *stack)
     return result;
 }
 
-void tgui_widget_poll_allocator_init(TGuiWidgetPoolAllocator *allocator)
+void tgui_widget_poll_allocator_create(TGuiWidgetPoolAllocator *allocator)
 {
     allocator->buffer_size = TGUI_DEFAULT_POOL_SIZE;
     allocator->buffer = (TGuiWidget *)malloc(allocator->buffer_size*sizeof(TGuiWidget));
@@ -776,7 +778,7 @@ void tgui_widget_allocator_destroy(TGuiWidgetPoolAllocator *allocator)
     allocator->free_list = 0;
 }
 
-TGuiHandle tgui_widget_allocator_alloc(TGuiWidgetPoolAllocator *allocator)
+TGuiHandle tgui_widget_allocator_pool(TGuiWidgetPoolAllocator *allocator)
 {
     TGuiHandle handle = TGUI_INVALID_HANDLE;
     if(allocator->free_list)
@@ -873,13 +875,13 @@ void tgui_init(TGuiBitmap *backbuffer, TGuiFont *font)
     state->font = font;
     state->font_height = 9;
     
-    tgui_widget_poll_allocator_init(&state->widget_allocator);
+    tgui_widget_poll_allocator_create(&state->widget_allocator);
     
-    tgui_clipping_stack_init(&global_clipping_stack);
+    tgui_clipping_stack_create(&global_clipping_stack);
     tgui_clipping_stack_push(&global_clipping_stack, tgui_rect_xywh(0, 0, backbuffer->width, backbuffer->height));
 }
 
-void tgui_destroy(void)
+void tgui_terminate(void)
 {
     TGuiState *state = &tgui_global_state;
     tgui_clipping_stack_destoy(&global_clipping_stack);
@@ -1325,7 +1327,7 @@ void tgui_copy_bitmap(TGuiBitmap *backbuffer, TGuiBitmap *bitmap, i32 x, i32 y)
     }
 }
 
-// TODO: create a round_f32u32() function
+// TODO: create a tgui_round_f32u32() function
 void tgui_draw_src_dest_bitmap(TGuiBitmap *backbuffer, TGuiBitmap *bitmap, TGuiRect src, TGuiRect dest)
 {
     // TODO: Implment alpha bending

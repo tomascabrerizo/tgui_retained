@@ -261,7 +261,7 @@ int main(int argc, char** argv)
         BitBlt(global_device_context, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, global_backbuffer_dc, 0, 0, SRCCOPY);
     }
     
-    tgui_destroy();
+    tgui_terminate();
     tgui_debug_free_bmp(&test_bitmap);
     win32_destroy_backbuffer();
 

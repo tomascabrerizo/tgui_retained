@@ -338,7 +338,7 @@ TGuiV2 tgui_widget_abs_pos(TGuiHandle handle);
 // NOTE: core lib functions
 //-----------------------------------------------------
 TGUI_API void tgui_init(TGuiBitmap *backbuffer, TGuiFont *font);
-TGUI_API void tgui_destroy(void);
+TGUI_API void tgui_terminate(void);
 TGUI_API void tgui_update(void);
 TGUI_API void tgui_draw_command_buffer(void);
 TGUI_API void tgui_push_event(TGuiEvent event);
@@ -348,9 +348,9 @@ TGUI_API b32 tgui_pull_draw_command(TGuiDrawCommand *draw_cmd);
 //-----------------------------------------------------
 //  NOTE: memory management functions
 //-----------------------------------------------------
-void tgui_widget_allocator_init(TGuiWidgetPoolAllocator *allocator);
+void tgui_widget_allocator_create(TGuiWidgetPoolAllocator *allocator);
 void tgui_widget_allocator_destroy(TGuiWidgetPoolAllocator *allocator);
-TGuiHandle tgui_widget_allocator_alloc(TGuiWidgetPoolAllocator *allocator);
+TGuiHandle tgui_widget_allocator_pool(TGuiWidgetPoolAllocator *allocator);
 void tgui_widget_allocator_free(TGuiWidgetPoolAllocator *allocator, TGuiHandle *handle);
 void tgui_widget_set(TGuiHandle handle, TGuiWidget widget);
 TGuiWidget *tgui_widget_get(TGuiHandle handle);
