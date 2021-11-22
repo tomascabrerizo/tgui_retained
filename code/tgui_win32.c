@@ -90,6 +90,8 @@ int main(int argc, char** argv)
 {
     UNUSED_VAR(argc);
     UNUSED_VAR(argv);
+
+    printf("[INFO]: widget size %llu\n", sizeof(TGuiWidget));
     
     WNDCLASSA window_class = {0};
     window_class.style = CS_HREDRAW|CS_VREDRAW|CS_OWNDC;
@@ -150,65 +152,30 @@ int main(int argc, char** argv)
     
     // NOTE: init TGUI lib
     tgui_init(&tgui_backbuffer, &test_font);
-
-    TGuiHandle container = tgui_create_container(TGUI_LAYOUT_HORIZONTAL, false, 0);
-    TGuiHandle container0 = tgui_create_container(TGUI_LAYOUT_VERTICAL, true, 10);
-
-    tgui_set_widget_position(container0, 300, 350);
-    tgui_container_add_widget(container0, container);
     
+    TGuiHandle frame1 = tgui_create_container(100, 100, 0, 0, TGUI_CONTAINER_DYNAMIC, TGUI_LAYOUT_VERTICAL, true, 20);
+    TGuiHandle frame2 = tgui_create_container(400, 120, 100, 240, TGUI_CONTAINER_V_SCROLL|TGUI_CONTAINER_H_SCROLL, TGUI_LAYOUT_VERTICAL, true, 20);
+    tgui_widget_to_root(frame1);
+    tgui_widget_to_root(frame2);
+
+    TGuiHandle button_box = tgui_create_container(0, 0, 0, 0, TGUI_CONTAINER_DYNAMIC, TGUI_LAYOUT_HORIZONTAL, false, 5);
+    tgui_container_add_widget(frame1, button_box);
+    TGuiHandle slider_box = tgui_create_container(0, 0, 0, 0, TGUI_CONTAINER_DYNAMIC, TGUI_LAYOUT_VERTICAL, false, 5);
+    tgui_container_add_widget(frame1, slider_box);
+
+    TGuiHandle button = tgui_create_button("button");
+    tgui_container_add_widget(button_box, button);
     TGuiHandle slider = tgui_create_slider();
-    TGuiHandle slider2 = tgui_create_slider();
-    tgui_container_add_widget(container0, slider);
-    tgui_container_add_widget(container0, slider2);
-
-    TGuiHandle column1 = tgui_create_container(TGUI_LAYOUT_VERTICAL, false, 5);
-    TGuiHandle column2 = tgui_create_scroll_container(tgui_v2(130, 260), true, 15);
-    TGuiHandle column3 = tgui_create_container(TGUI_LAYOUT_VERTICAL, false, 5);
-
-    TGuiHandle new_container = tgui_create_scroll_container(tgui_v2(220, 200), true, 15);
-    tgui_set_widget_position(new_container, 300, 50);
-    tgui_set_widget_position(column2, 20, 100);
-    tgui_widget_to_root(new_container);
-    tgui_widget_to_root(container0);
-    tgui_widget_to_root(column2);
-
-    tgui_container_add_widget(container, column1);
-    tgui_container_add_widget(container, column3);
-
-    TGuiHandle box1 = tgui_create_checkbox("box 0");
-    TGuiHandle box2 = tgui_create_checkbox("box 1");
-    TGuiHandle box3 = tgui_create_checkbox("box 2");
-
-    TGuiHandle buttton3 = tgui_create_button("button");
-    TGuiHandle box4 = tgui_create_checkbox("box 3");
-    TGuiHandle row = tgui_create_container(TGUI_LAYOUT_HORIZONTAL, false, 5);
-    tgui_container_add_widget(row, buttton3);
-    tgui_container_add_widget(row, box4);
+    tgui_container_add_widget(slider_box, slider);
     
-    tgui_container_add_widget(column3, box1);
-    tgui_container_add_widget(column3, box2);
-    tgui_container_add_widget(column3, box3);
-    tgui_container_add_widget(column3, row);
-
-    TGuiHandle button1 = tgui_create_button("button 1");
-    TGuiHandle button2 = tgui_create_button("button 2");
-    TGuiHandle checkbox2 = tgui_create_checkbox("checkbox 2");
-    TGuiHandle checkbox1 = tgui_create_checkbox("checkbox 1");
-    
-    tgui_container_add_widget(column1, button1);
-    tgui_container_add_widget(column1, checkbox1);
-    tgui_container_add_widget(column1, button2);
-    tgui_container_add_widget(column1, checkbox2);
-
     #define BUTTONS_COUNT 8
     TGuiHandle buttons[BUTTONS_COUNT];
     for(i32 i = 0; i < BUTTONS_COUNT; ++i)
     {
         buttons[i] = tgui_create_button("button");
-        tgui_container_add_widget(column2, buttons[i]);
+        tgui_container_add_widget(frame2, buttons[i]);
     }
-
+    
     while(global_running)
     {
         LARGE_INTEGER large_current_time;

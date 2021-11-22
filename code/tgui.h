@@ -167,7 +167,6 @@ typedef struct TGuiDrawCommandBuffer
 typedef enum TGuiWidgetType
 {
     TGUI_CONTAINER,
-    TGUI_SCROLL_CONTAINER,
     TGUI_END_CONTAINER,
     TGUI_BUTTON,
     TGUI_CHECKBOX,
@@ -184,6 +183,14 @@ typedef enum TGuiLayoutType
     
     TGUI_LAYOUT_COUNT,
 } TGuiLayoutType;
+
+typedef enum TGuiContanerFlags
+{
+    TGUI_CONTAINER_DYNAMIC   = 1 << 0,
+    TGUI_CONTAINER_V_SCROLL  = 1 << 1,
+    TGUI_CONTAINER_H_SCROLL  = 1 << 2,
+    TGUI_CONTAINER_DRAGGABLE = 1 << 3,
+} TGuiContanerFlags;
 
 typedef struct TGuiWidgetLayout
 {
@@ -207,12 +214,10 @@ typedef struct TGuiWidgetHeader
     TGuiHandle child_last;
     TGuiHandle sibling_next;
     TGuiHandle sibling_prev;
-
+    
     TGuiWidgetType type;
-    TGuiWidgetLayout layout;
     TGuiV2 size;
     TGuiV2 position;
-    TGuiRect clipping;
     
 } TGuiWidgetHeader;
 
@@ -220,9 +225,17 @@ typedef struct TGuiWidgetContainer
 {
     TGuiWidgetHeader header;
     //----------------------
+    TGuiContanerFlags flags;
+    TGuiWidgetLayout layout;
+    TGuiV2 dimension;
+    TGuiRect vertical_grip;
+    TGuiRect horizontal_grip;
+    f32 vertical_value;
+    f32 horizontal_value;
     b32 visible;
 } TGuiWidgetContainer;
 
+#if 0
 typedef struct TGuiWidgetScrollContainer
 {
     TGuiWidgetHeader header;
@@ -232,6 +245,7 @@ typedef struct TGuiWidgetScrollContainer
     TGuiV2 grip_dimension;
     f32 value;
 } TGuiWidgetScrollContainer;
+#endif
 
 typedef struct TGuiWidgetButton
 {
@@ -264,7 +278,6 @@ typedef union TGuiWidget
     TGuiWidgetHeader header;
     //----------------------
     TGuiWidgetContainer container;
-    TGuiWidgetScrollContainer scroll_container;
     TGuiWidgetButton button;
     TGuiWidgetCheckBox checkbox;
     TGuiWidgetSlider slider;
@@ -319,8 +332,7 @@ extern TGuiState tgui_global_state;
 //-----------------------------------------------------
 typedef void (*TGuiWidgetFP)(TGuiHandle handle);
 
-TGUI_API TGuiHandle tgui_create_container(TGuiLayoutType layout, b32 visible, u32 padding);
-TGUI_API TGuiHandle tgui_create_scroll_container(TGuiV2 dimension, b32 visible, u32 padding);
+TGUI_API TGuiHandle tgui_create_container(i32 x, i32 y, i32 width, i32 height, TGuiContanerFlags flags, TGuiLayoutType layout, b32 visible, u32 padding);
 TGUI_API TGuiHandle tgui_create_button(char *label);
 TGUI_API TGuiHandle tgui_create_checkbox(char *label);
 TGUI_API TGuiHandle tgui_create_slider(void);

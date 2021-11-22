@@ -107,35 +107,46 @@ inline static TGuiHandle tgui_create_end_container(void)
     return handle;
 }
 
-TGuiHandle tgui_create_container(TGuiLayoutType layout, b32 visible, u32 padding)
+static void tgui_update_container_dimension(TGuiWidgetContainer *container)
 {
-    TGuiHandle handle = TGUI_INVALID_HANDLE;
-    TGuiWidget *widget = tgui_create_widget(&handle); 
-    widget->header.type = TGUI_CONTAINER;
-    widget->header.size = tgui_v2(0, 0);
-    widget->container.header.layout.type = layout;
-    widget->container.header.layout.padding = padding;
-    widget->container.visible = visible;
-    return handle;
+    f32 grip_size = 20.0f;
+    if(container->flags & TGUI_CONTAINER_V_SCROLL)
+    {
+        container->vertical_value = 0;
+        container->vertical_grip = tgui_rect_xywh(container->header.size.x, 0, grip_size, container->header.size.y);
+        container->header.size.x += grip_size;
+    }
+    if(container->flags & TGUI_CONTAINER_H_SCROLL)
+    {
+        container->horizontal_value = 0;
+        container->horizontal_grip = tgui_rect_xywh(0, container->header.size.y, container->header.size.x, grip_size);
+        container->header.size.y += grip_size;
+    }
+    container->dimension = tgui_v2_sub(container->header.size, tgui_v2(container->vertical_grip.width, container->horizontal_grip.height));
 }
 
-TGuiHandle tgui_create_scroll_container(TGuiV2 dimension, b32 visible, u32 padding)
+TGuiHandle tgui_create_container(i32 x, i32 y, i32 width, i32 height, TGuiContanerFlags flags, TGuiLayoutType layout, b32 visible, u32 padding)
 {
     TGuiHandle handle = TGUI_INVALID_HANDLE;
+    // NOTE: allocate end container at first so it not change the widget ptr we its allocated
+    TGuiHandle end_container_handle = tgui_create_end_container();
     TGuiWidget *widget = tgui_create_widget(&handle); 
-    widget->header.type = TGUI_SCROLL_CONTAINER;
-    widget->header.size = tgui_v2(0, 0);
-    widget->scroll_container.dimension = dimension;
-    widget->scroll_container.header.layout.type = TGUI_LAYOUT_VERTICAL;
-    widget->scroll_container.header.layout.padding = padding;
-    widget->scroll_container.visible = visible;
-    widget->scroll_container.grip_dimension = dimension;
-    widget->scroll_container.grip_dimension.x = 20;
-    widget->scroll_container.value = 0;
-
+    
     // NOTE: add end container widget to the last child
-    widget->header.child_last = tgui_create_end_container();
-    widget->header.child_first = widget->header.child_last;
+    widget->header.child_first = end_container_handle;
+    widget->header.child_last = end_container_handle;
+    
+    widget->header.type = TGUI_CONTAINER;
+    widget->header.position = tgui_v2(x, y);
+    widget->header.size = tgui_v2(width, height);
+    
+    widget->container.layout.type = layout;
+    widget->container.layout.padding = padding;
+    widget->container.flags = flags;
+    widget->container.visible = visible;
+
+    tgui_update_container_dimension(&widget->container);
+
     return handle;
 }
 
@@ -221,14 +232,14 @@ TGuiV2 tgui_widget_abs_pos(TGuiHandle handle)
     return result; 
 }
 
-static void tgui_container_set_container_total_size(TGuiWidget *container, TGuiWidget *widget)
+static void tgui_container_set_container_total_size(TGuiWidgetContainer *container, TGuiWidget *widget)
 {
     // NOTE: resize the container
     TGuiV2 total_container_size = tgui_v2(0, 0);
     u32 num_child = 0;
-    while(widget)
+    while(widget && (widget->header.type != TGUI_END_CONTAINER))
     {
-        switch(container->header.layout.type)
+        switch(container->layout.type)
         {
             case TGUI_LAYOUT_VERTICAL:
             {
@@ -258,17 +269,17 @@ static void tgui_container_set_container_total_size(TGuiWidget *container, TGuiW
         widget = tgui_widget_get(widget->header.sibling_next);
     }
     // NOTE: add the container last padding
-    switch(container->header.layout.type)
+    switch(container->layout.type)
     {
         case TGUI_LAYOUT_VERTICAL:
         {
-            total_container_size.x += container->header.layout.padding*2;
-            total_container_size.y += container->header.layout.padding*(num_child+1);
+            total_container_size.x += container->layout.padding*2;
+            total_container_size.y += container->layout.padding*(num_child+1);
         } break;
         case TGUI_LAYOUT_HORIZONTAL:
         {
-            total_container_size.x += container->header.layout.padding*(num_child+1);
-            total_container_size.y += container->header.layout.padding*2;
+            total_container_size.x += container->layout.padding*(num_child+1);
+            total_container_size.y += container->layout.padding*2;
         } break;
         case TGUI_LAYOUT_NONE:
         {
@@ -282,7 +293,7 @@ static void tgui_container_set_container_total_size(TGuiWidget *container, TGuiW
     container->header.size = total_container_size;
 }
 
-static void tgui_container_recalculate_dimension(TGuiWidget *container)
+static void tgui_container_recalculate_dimension(TGuiWidgetContainer *container)
 {
     while(container)
     {
@@ -290,52 +301,58 @@ static void tgui_container_recalculate_dimension(TGuiWidget *container)
         if(first_child)
         {
             tgui_container_set_container_total_size(container, first_child);
+            tgui_update_container_dimension(container);
         }
-        container = tgui_widget_get(container->header.parent);
+        TGuiWidget *parent = tgui_widget_get(container->header.parent);
+        container = &parent->container;
     }
 }
 
-static void tgui_container_set_childs_position(TGuiWidget *container, TGuiWidget *widget)
+static void tgui_container_set_childs_position(TGuiWidgetContainer *container, TGuiWidget *widget)
 {
+    TGuiHandle container_last_child = widget->header.sibling_prev;
+    widget = tgui_widget_get(container_last_child);
     while(widget)
     {
-        TGuiWidget *widget_next = tgui_widget_get(widget->header.sibling_next);
         TGuiWidget *widget_prev = tgui_widget_get(widget->header.sibling_prev);
-        if(container->header.layout.type == TGUI_LAYOUT_VERTICAL)
+        TGuiWidget *widget_next = tgui_widget_get(widget->header.sibling_next);
+        if(container->layout.type == TGUI_LAYOUT_VERTICAL)
         {
-            widget->header.position.x = container->header.layout.padding;
-            if(widget->header.handle != container->header.child_last) 
+            widget->header.position.x = container->layout.padding;
+            if(widget->header.handle != container_last_child) 
             {
-                widget->header.position.y = widget_next->header.position.y + widget_next->header.size.y + container->header.layout.padding;
+                widget->header.position.y = widget_next->header.position.y + widget_next->header.size.y + container->layout.padding;
             }
             else
             {
-                widget->header.position.y = container->header.layout.padding;
-                if(container->header.type == TGUI_SCROLL_CONTAINER)
+                widget->header.position.y = container->layout.padding;
+                if(container->flags & TGUI_CONTAINER_V_SCROLL)
                 {
-                    // TODO: fix this padding bug
-                    widget->header.position.y = 0;
-                    widget->header.position.y -= (container->scroll_container.value * container->header.size.y);
+                    widget->header.position.y -= (container->vertical_value * container->header.size.y);
                 }
             }
         }
-        if(container->header.layout.type == TGUI_LAYOUT_HORIZONTAL)
+        if(container->layout.type == TGUI_LAYOUT_HORIZONTAL)
         {
-            widget->header.position.y = container->header.layout.padding;
-            if(widget_next) 
+            widget->header.position.y = container->layout.padding;
+            if(widget->header.handle != container_last_child) 
             {
-                widget->header.position.x = widget_next->header.position.x + widget_next->header.size.x + container->header.layout.padding;
+                widget->header.position.x = widget_next->header.position.x + widget_next->header.size.x + container->layout.padding;
             }
             else
             {
-                widget->header.position.x = container->header.layout.padding;
+                widget->header.position.x = container->layout.padding;
+                if(container->flags & TGUI_CONTAINER_H_SCROLL)
+                {
+                    widget->header.position.x -= (container->horizontal_value * container->header.size.x);
+                }
             }
         }
         widget = widget_prev;
     }
 }
 
-static void tgui_container_recalculate_widget_position(TGuiWidget *container)
+static void tgui_container_recalculate_widget_position(TGuiWidgetContainer *container)
 {
     while(container)
     {
@@ -344,35 +361,39 @@ static void tgui_container_recalculate_widget_position(TGuiWidget *container)
         {
             tgui_container_set_childs_position(container, last_child);
         }
-        container = tgui_widget_get(container->header.parent);
+        TGuiWidget *parent = tgui_widget_get(container->header.parent);
+        container = (TGuiWidgetContainer *)parent;
     }
 }
 
 void tgui_container_add_widget(TGuiHandle container_handle, TGuiHandle widget_handle)
 {
-    TGuiWidget *container = tgui_widget_get(container_handle);
-    if(container->header.type == TGUI_CONTAINER || container->header.type == TGUI_SCROLL_CONTAINER)
+    TGuiWidget *container_widget = tgui_widget_get(container_handle);
+    ASSERT(container_widget->header.type == TGUI_CONTAINER);
+
+    TGuiWidgetContainer *container = (TGuiWidgetContainer *)container_widget;
+    TGuiWidget *widget = tgui_widget_get(widget_handle);
+    
+    if(!container->header.child_last)
     {
-        TGuiWidget *widget = tgui_widget_get(widget_handle);
-        
-        if(!container->header.child_last)
-        {
-            container->header.child_last = widget_handle;
-        }
-        widget->header.parent = container_handle; 
-        if(container->header.child_first)
-        {
-            TGuiWidget *old_first_child = tgui_widget_get(container->header.child_first);
-            old_first_child->header.sibling_prev = widget_handle; 
-        }
-        widget->header.sibling_next = container->header.child_first; 
-        container->header.child_first = widget_handle;
-        
-        // NOTE: recalculate the dimensions
-        tgui_container_recalculate_dimension(container);
-        // NOTE: set the widget position inside container
-        tgui_container_recalculate_widget_position(container);
+        container->header.child_last = widget_handle;
     }
+    widget->header.parent = container_handle; 
+    if(container->header.child_first)
+    {
+        TGuiWidget *old_first_child = tgui_widget_get(container->header.child_first);
+        old_first_child->header.sibling_prev = widget_handle; 
+    }
+    widget->header.sibling_next = container->header.child_first; 
+    container->header.child_first = widget_handle;
+    
+    // NOTE: recalculate the dimensions
+    if(container->flags & TGUI_CONTAINER_DYNAMIC)
+    {
+        tgui_container_recalculate_dimension(container);
+    }
+    // NOTE: set the widget position inside container
+    tgui_container_recalculate_widget_position(container);
 }
 
 void tgui_widget_update(TGuiHandle handle)
@@ -395,14 +416,6 @@ void tgui_widget_update(TGuiHandle handle)
         widget_rect.x += (widget->slider.value * widget->header.size.x) - (widget->slider.grip_dimension.x*0.5f); 
         widget_rect.dim = widget->slider.grip_dimension;
     }
-    else if(widget->header.type == TGUI_SCROLL_CONTAINER)
-    {
-        widget_rect.x += widget->header.size.x; 
-        widget_rect.y += (widget->scroll_container.dimension.y * widget->scroll_container.value); 
-        widget_rect.dim = widget->scroll_container.grip_dimension;
-        // TODO: this could be precalculated
-        widget_rect.dim.y = (widget->scroll_container.dimension.y / widget->header.size.y) * widget->scroll_container.dimension.y;
-    }
     else
     {
         widget_rect.dim = widget->header.size;
@@ -420,33 +433,34 @@ void tgui_widget_update(TGuiHandle handle)
     switch(widget->header.type)
     {
         case TGUI_CONTAINER:
-        {}break;
-        case TGUI_SCROLL_CONTAINER:
         {
-            f32 mouse_y_rel = (mouse.y - widget_abs_pos.y) / widget->scroll_container.dimension.y;
-            if(is_focus && state->mouse_is_down)
+            if(widget->container.flags & TGUI_CONTAINER_V_SCROLL)
             {
-                state->active = widget->header.handle;
-            }
-            if(is_active)
-            {
-                if(mouse_y_rel < 0.0f)
+                f32 mouse_y_rel = (mouse.y - widget_abs_pos.y) / widget->header.size.y;
+                if(is_focus && state->mouse_is_down)
                 {
-                    mouse_y_rel = 0;
+                    state->active = widget->header.handle;
                 }
-                f32 y_cap = (1.0f - (widget->scroll_container.grip_dimension.y / widget->header.size.y));
-                if(mouse_y_rel > y_cap)
+                if(is_active)
                 {
-                    mouse_y_rel = y_cap;
+                    if(mouse_y_rel < 0.0f)
+                    {
+                        mouse_y_rel = 0;
+                    }
+                    f32 y_cap = (1.0f - (widget->header.size.y / widget->header.size.y));
+                    if(mouse_y_rel > y_cap)
+                    {
+                        mouse_y_rel = y_cap;
+                    }
+                    widget->container.vertical_value = mouse_y_rel; 
                 }
-                widget->scroll_container.value = mouse_y_rel; 
+                if(is_active && state->mouse_up)
+                {
+                    state->active = 0;
+                }
+                // TODO: check how and where to update the position
+                tgui_container_recalculate_widget_position((TGuiWidgetContainer *)widget);
             }
-            if(is_active && state->mouse_up)
-            {
-                state->active = 0;
-            }
-            // TODO: check how and where to update the position
-            tgui_container_recalculate_widget_position(widget);
         }break;
         case TGUI_END_CONTAINER:
         {}break;
@@ -519,69 +533,57 @@ void tgui_widget_render(TGuiHandle handle)
     TGuiWidget *widget = tgui_widget_get(handle);
     TGuiV2 widget_abs_pos = tgui_widget_abs_pos(handle);
     TGuiState *state = &tgui_global_state;
-
+    
     switch(widget->header.type)
     {
         case TGUI_CONTAINER:
         {
-            TGuiWidgetContainer *container_data = &widget->container;
-            if(!container_data->visible) return;
+
+            if(widget->container.flags & TGUI_CONTAINER_V_SCROLL) 
+            {
+                u32 break_here = 0;
+                UNUSED_VAR(break_here);
+            }
 
             TGuiDrawCommand draw_cmd = {0};
             draw_cmd.type = TGUI_DRAWCMD_ROUNDED_RECT;
             draw_cmd.ratio = 16;
             draw_cmd.descriptor.pos = widget_abs_pos;
-            draw_cmd.descriptor.dim = widget->header.size;
-            u32 color = TGUI_BLACK; 
-            draw_cmd.color = color;
-            tgui_push_draw_command(draw_cmd);
-        } break;
-        case TGUI_SCROLL_CONTAINER:
-        {
-            TGuiWidgetContainer *container_data = &widget->container;
-            if(!container_data->visible) return;
-
-            TGuiDrawCommand draw_cmd = {0};
-            draw_cmd.type = TGUI_DRAWCMD_RECT;
-            draw_cmd.descriptor.pos = widget_abs_pos;
-            draw_cmd.descriptor.dim = widget->scroll_container.dimension;
-            u32 color = TGUI_BLACK; 
-            draw_cmd.color = color;
+            // TODO: maybe create a tgui_get_container_dimension function
+            draw_cmd.descriptor.dim = widget->container.dimension;
+            draw_cmd.color = TGUI_BLACK;
             tgui_push_draw_command(draw_cmd);
             
-            TGuiDrawCommand back_grip_cmd = {0};
-            back_grip_cmd.type = TGUI_DRAWCMD_RECT;
-            back_grip_cmd.descriptor.pos = widget_abs_pos;
-            back_grip_cmd.descriptor.pos.x += widget->scroll_container.dimension.x; 
-            back_grip_cmd.descriptor.dim = widget->scroll_container.grip_dimension;
-            color = TGUI_ORANGE; 
-            back_grip_cmd.color = color;
-            tgui_push_draw_command(back_grip_cmd);
-
-            TGuiDrawCommand grip_cmd = {0};
-            grip_cmd.type = TGUI_DRAWCMD_ROUNDED_RECT;
-            grip_cmd.ratio = 4;
-            grip_cmd.descriptor.pos = widget_abs_pos;
-            grip_cmd.descriptor.pos.x += widget->scroll_container.dimension.x; 
-            grip_cmd.descriptor.pos.y += (widget->scroll_container.dimension.y * widget->scroll_container.value); 
-            grip_cmd.descriptor.dim = widget->scroll_container.grip_dimension;
-            // TODO: watch the division by zero
-            if(widget->header.size.y)
+            if(widget->container.flags & TGUI_CONTAINER_V_SCROLL)
             {
-                // TODO: this could be precalculated
-                grip_cmd.descriptor.dim.y = (widget->scroll_container.dimension.y / widget->header.size.y) * widget->scroll_container.dimension.y;
-            }
-            color = TGUI_GREY; 
-            grip_cmd.color = color;
-            tgui_push_draw_command(grip_cmd);
+                TGuiDrawCommand back_grip_cmd = {0};
+                back_grip_cmd.type = TGUI_DRAWCMD_RECT;
+                back_grip_cmd.descriptor.pos = tgui_v2_add(widget_abs_pos, widget->container.vertical_grip.pos);
+                back_grip_cmd.descriptor.dim = widget->container.vertical_grip.dim;
+                back_grip_cmd.color = TGUI_ORANGE;
+                tgui_push_draw_command(back_grip_cmd);
 
+            }
+            if(widget->container.flags & TGUI_CONTAINER_H_SCROLL)
+            {
+                TGuiDrawCommand back_grip_cmd = {0};
+                back_grip_cmd.type = TGUI_DRAWCMD_RECT;
+                back_grip_cmd.descriptor.pos = tgui_v2_add(widget_abs_pos, widget->container.horizontal_grip.pos);
+                back_grip_cmd.descriptor.dim = widget->container.horizontal_grip.dim;
+                back_grip_cmd.color = TGUI_ORANGE;
+                tgui_push_draw_command(back_grip_cmd);
+            }
+            
+            // NOTE: push start clipping command
             TGuiDrawCommand start_clip_cmd = {0};
             start_clip_cmd.type = TGUI_DRAWCMD_START_CLIPPING;
-            start_clip_cmd.descriptor = draw_cmd.descriptor;
+            start_clip_cmd.descriptor.pos = widget_abs_pos;
+            start_clip_cmd.descriptor.dim = widget->container.dimension;
             tgui_push_draw_command(start_clip_cmd);
-        }break;
+        } break;
         case TGUI_END_CONTAINER:
         {
+            // NOTE: push end clipping command
             TGuiDrawCommand end_clip_cmd = {0};
             end_clip_cmd.type = TGUI_DRAWCMD_END_CLIPPING;
             tgui_push_draw_command(end_clip_cmd);
@@ -728,6 +730,9 @@ void tgui_clipping_stack_destoy(TGuiClippingStack *stack)
 
 void tgui_clipping_stack_push(TGuiClippingStack *stack, TGuiRect clipping)
 {
+    // TODO: remove this ASSERT();
+    ASSERT(stack->buffer_size < 16);
+
     if(stack->top == stack->buffer_size)
     {
         u32 new_buffer_size = stack->buffer_size * 2;
