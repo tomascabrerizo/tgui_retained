@@ -107,24 +107,6 @@ inline static TGuiHandle tgui_create_end_container(void)
     return handle;
 }
 
-static void tgui_update_container_dimension(TGuiWidgetContainer *container)
-{
-    f32 grip_size = 20.0f;
-    if(container->flags & TGUI_CONTAINER_V_SCROLL)
-    {
-        container->vertical_value = 0;
-        container->vertical_grip = tgui_rect_xywh(container->header.size.x, 0, grip_size, container->header.size.y);
-        container->header.size.x += grip_size;
-    }
-    if(container->flags & TGUI_CONTAINER_H_SCROLL)
-    {
-        container->horizontal_value = 0;
-        container->horizontal_grip = tgui_rect_xywh(0, container->header.size.y, container->header.size.x, grip_size);
-        container->header.size.y += grip_size;
-    }
-    container->dimension = tgui_v2_sub(container->header.size, tgui_v2(container->vertical_grip.width, container->horizontal_grip.height));
-}
-
 TGuiHandle tgui_create_container(i32 x, i32 y, i32 width, i32 height, TGuiContanerFlags flags, TGuiLayoutType layout, b32 visible, u32 padding)
 {
     TGuiHandle handle = TGUI_INVALID_HANDLE;
@@ -144,8 +126,19 @@ TGuiHandle tgui_create_container(i32 x, i32 y, i32 width, i32 height, TGuiContan
     widget->container.layout.padding = padding;
     widget->container.flags = flags;
     widget->container.visible = visible;
-
-    tgui_update_container_dimension(&widget->container);
+    
+    widget->container.dimension = widget->header.size;
+    f32 grip_size = 20.0f;
+    if(widget->container.flags & TGUI_CONTAINER_V_SCROLL)
+    {
+        widget->container.vertical_grip = tgui_rect_xywh(widget->header.size.x, 0, grip_size, widget->header.size.y);
+        widget->header.size.x += grip_size;
+    }
+    if(widget->container.flags & TGUI_CONTAINER_H_SCROLL)
+    {
+        widget->container.horizontal_grip = tgui_rect_xywh(0, widget->header.size.y, widget->header.size.x, grip_size);
+        widget->header.size.y += grip_size;
+    }
 
     return handle;
 }
@@ -290,7 +283,15 @@ static void tgui_container_set_container_total_size(TGuiWidgetContainer *contain
         } break;
     }
     
-    container->header.size = total_container_size;
+    if(container->flags & TGUI_CONTAINER_DYNAMIC)
+    {
+        container->header.size = total_container_size;
+        container->dimension = container->header.size;
+    }
+    else
+    {
+        container->total_dimension = total_container_size;
+    }
 }
 
 static void tgui_container_recalculate_dimension(TGuiWidgetContainer *container)
@@ -301,7 +302,6 @@ static void tgui_container_recalculate_dimension(TGuiWidgetContainer *container)
         if(first_child)
         {
             tgui_container_set_container_total_size(container, first_child);
-            tgui_update_container_dimension(container);
         }
         TGuiWidget *parent = tgui_widget_get(container->header.parent);
         container = &parent->container;
@@ -318,34 +318,32 @@ static void tgui_container_set_childs_position(TGuiWidgetContainer *container, T
         TGuiWidget *widget_next = tgui_widget_get(widget->header.sibling_next);
         if(container->layout.type == TGUI_LAYOUT_VERTICAL)
         {
-            widget->header.position.x = container->layout.padding;
             if(widget->header.handle != container_last_child) 
             {
                 widget->header.position.y = widget_next->header.position.y + widget_next->header.size.y + container->layout.padding;
+                widget->header.position.x = widget_next->header.position.x;
             }
             else
             {
                 widget->header.position.y = container->layout.padding;
-                if(container->flags & TGUI_CONTAINER_V_SCROLL)
-                {
-                    widget->header.position.y -= (container->vertical_value * container->header.size.y);
-                }
+                widget->header.position.y -= (container->vertical_value * container->header.size.y);
+                widget->header.position.x = container->layout.padding;
+                widget->header.position.x -= (container->horizontal_value * container->header.size.x);
             }
         }
         if(container->layout.type == TGUI_LAYOUT_HORIZONTAL)
         {
-            widget->header.position.y = container->layout.padding;
             if(widget->header.handle != container_last_child) 
             {
                 widget->header.position.x = widget_next->header.position.x + widget_next->header.size.x + container->layout.padding;
+                widget->header.position.y = widget_next->header.position.y;
             }
             else
             {
                 widget->header.position.x = container->layout.padding;
-                if(container->flags & TGUI_CONTAINER_H_SCROLL)
-                {
-                    widget->header.position.x -= (container->horizontal_value * container->header.size.x);
-                }
+                widget->header.position.x -= (container->horizontal_value * container->header.size.x);
+                widget->header.position.y = container->layout.padding;
+                widget->header.position.y -= (container->vertical_value * container->header.size.y);
             }
         }
         widget = widget_prev;
@@ -388,10 +386,7 @@ void tgui_container_add_widget(TGuiHandle container_handle, TGuiHandle widget_ha
     container->header.child_first = widget_handle;
     
     // NOTE: recalculate the dimensions
-    if(container->flags & TGUI_CONTAINER_DYNAMIC)
-    {
-        tgui_container_recalculate_dimension(container);
-    }
+    tgui_container_recalculate_dimension(container);
     // NOTE: set the widget position inside container
     tgui_container_recalculate_widget_position(container);
 }
@@ -400,8 +395,19 @@ void tgui_widget_update(TGuiHandle handle)
 {
     TGuiState *state = &tgui_global_state;
     TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y); 
+
     
     TGuiWidget *widget = tgui_widget_get(handle);
+    // NOTE: if the mouse is not in the parent containar, dont event update the widget
+    if(widget->header.parent)
+    {
+        TGuiWidget *parent = tgui_widget_get(widget->header.parent);
+        ASSERT(parent->header.type == TGUI_CONTAINER);
+        TGuiV2 widget_abs_pos = tgui_widget_abs_pos(widget->header.parent);
+        TGuiRect container_box = tgui_rect_xywh(widget_abs_pos.x, widget_abs_pos.y, parent->container.dimension.x, parent->container.dimension.y);
+        if(!tgui_point_inside_rect(mouse, container_box)) return;
+    }
+
     TGuiV2 widget_abs_pos = tgui_widget_abs_pos(handle);
     TGuiRect widget_rect;
     widget_rect.pos = widget_abs_pos;
@@ -436,31 +442,69 @@ void tgui_widget_update(TGuiHandle handle)
         {
             if(widget->container.flags & TGUI_CONTAINER_V_SCROLL)
             {
-                f32 mouse_y_rel = (mouse.y - widget_abs_pos.y) / widget->header.size.y;
-                if(is_focus && state->mouse_is_down)
+                TGuiRect backgrip;
+                backgrip.pos = tgui_v2_add(widget_abs_pos, widget->container.vertical_grip.pos);
+                backgrip.dim = widget->container.vertical_grip.dim;
+                
+                TGuiRect grip;
+                TGuiV2 grip_pos = widget->container.vertical_grip.pos;
+                grip_pos.y = widget->container.vertical_value * ( widget->container.dimension.y - widget->container.vertical_grip.height*0.5f);
+                grip.pos = tgui_v2_add(widget_abs_pos, grip_pos);
+                grip.dim = widget->container.vertical_grip.dim;
+                if(widget->container.total_dimension.y)
                 {
-                    state->active = widget->header.handle;
-                }
-                if(is_active)
-                {
-                    if(mouse_y_rel < 0.0f)
+                    grip.dim.y = (widget->container.dimension.y / widget->container.total_dimension.y) * widget->container.vertical_grip.height;
+                    if(tgui_point_inside_rect(mouse, grip) && state->mouse_down)
                     {
-                        mouse_y_rel = 0;
+                        widget->container.grabbing_y = true; 
                     }
-                    f32 y_cap = (1.0f - (widget->header.size.y / widget->header.size.y));
-                    if(mouse_y_rel > y_cap)
+                    if(state->mouse_up)
                     {
-                        mouse_y_rel = y_cap;
+                        widget->container.grabbing_y = false; 
                     }
-                    widget->container.vertical_value = mouse_y_rel; 
+                    if(widget->container.grabbing_y)
+                    {
+                        f32 y_diff = (f32)(state->mouse_y - state->last_mouse_y) / widget->container.total_dimension.y;
+                        widget->container.vertical_value += y_diff;
+                        if(widget->container.vertical_value < 0) widget->container.vertical_value = 0;
+                        if(widget->container.vertical_value > 1) widget->container.vertical_value = 1;
+
+                    }
                 }
-                if(is_active && state->mouse_up)
-                {
-                    state->active = 0;
-                }
-                // TODO: check how and where to update the position
-                tgui_container_recalculate_widget_position((TGuiWidgetContainer *)widget);
             }
+
+            if(widget->container.flags & TGUI_CONTAINER_H_SCROLL)
+            {
+                TGuiRect backgrip;
+                backgrip.pos = tgui_v2_add(widget_abs_pos, widget->container.horizontal_grip.pos);
+                backgrip.dim = widget->container.horizontal_grip.dim;
+                
+                TGuiRect grip;
+                TGuiV2 grip_pos = widget->container.horizontal_grip.pos;
+                grip_pos.x = widget->container.horizontal_value * ( widget->container.dimension.x - widget->container.horizontal_grip.width*0.5f);
+                grip.pos = tgui_v2_add(widget_abs_pos, grip_pos);
+                grip.dim = widget->container.horizontal_grip.dim;
+                if(widget->container.total_dimension.x)
+                {
+                    grip.dim.x = (widget->container.dimension.x / widget->container.total_dimension.x) * widget->container.horizontal_grip.width;
+                    if(tgui_point_inside_rect(mouse, grip) && state->mouse_down)
+                    {
+                        widget->container.grabbing_x = true; 
+                    }
+                    if(state->mouse_up)
+                    {
+                        widget->container.grabbing_x = false; 
+                    }
+                    if(widget->container.grabbing_x)
+                    {
+                        f32 x_diff = (f32)(state->mouse_x - state->last_mouse_x) / widget->container.total_dimension.x;
+                        widget->container.horizontal_value += x_diff;
+                        if(widget->container.horizontal_value < 0) widget->container.horizontal_value = 0;
+                        if(widget->container.horizontal_value > 1) widget->container.horizontal_value = 1;
+                    }
+                }
+            }
+            tgui_container_recalculate_widget_position(&widget->container);
         }break;
         case TGUI_END_CONTAINER:
         {}break;
@@ -538,16 +582,13 @@ void tgui_widget_render(TGuiHandle handle)
     {
         case TGUI_CONTAINER:
         {
-
-            if(widget->container.flags & TGUI_CONTAINER_V_SCROLL) 
-            {
-                u32 break_here = 0;
-                UNUSED_VAR(break_here);
-            }
-
             TGuiDrawCommand draw_cmd = {0};
-            draw_cmd.type = TGUI_DRAWCMD_ROUNDED_RECT;
-            draw_cmd.ratio = 16;
+            draw_cmd.type = TGUI_DRAWCMD_RECT;
+            if(widget->container.flags & TGUI_CONTAINER_DYNAMIC) 
+            {
+                draw_cmd.type = TGUI_DRAWCMD_ROUNDED_RECT;
+                draw_cmd.ratio = 16;
+            }
             draw_cmd.descriptor.pos = widget_abs_pos;
             // TODO: maybe create a tgui_get_container_dimension function
             draw_cmd.descriptor.dim = widget->container.dimension;
@@ -563,6 +604,21 @@ void tgui_widget_render(TGuiHandle handle)
                 back_grip_cmd.color = TGUI_ORANGE;
                 tgui_push_draw_command(back_grip_cmd);
 
+                TGuiDrawCommand grip_cmd = {0};
+                grip_cmd.type = TGUI_DRAWCMD_ROUNDED_RECT;
+                grip_cmd.ratio = 4;
+
+                TGuiV2 grip_pos = widget->container.vertical_grip.pos;
+                grip_pos.y = widget->container.vertical_value * ( widget->container.dimension.y - widget->container.vertical_grip.height*0.5f);
+                grip_cmd.descriptor.pos = tgui_v2_add(widget_abs_pos, grip_pos);
+                grip_cmd.descriptor.dim = widget->container.vertical_grip.dim;
+                if(widget->container.total_dimension.y)
+                {
+                    grip_cmd.descriptor.dim.y = (widget->container.dimension.y / widget->container.total_dimension.y) * widget->container.vertical_grip.height;
+                }
+                grip_cmd.color = TGUI_GREEN;
+                tgui_push_draw_command(grip_cmd);
+
             }
             if(widget->container.flags & TGUI_CONTAINER_H_SCROLL)
             {
@@ -572,6 +628,21 @@ void tgui_widget_render(TGuiHandle handle)
                 back_grip_cmd.descriptor.dim = widget->container.horizontal_grip.dim;
                 back_grip_cmd.color = TGUI_ORANGE;
                 tgui_push_draw_command(back_grip_cmd);
+
+                TGuiDrawCommand grip_cmd = {0};
+                grip_cmd.type = TGUI_DRAWCMD_ROUNDED_RECT;
+                grip_cmd.ratio = 4;
+
+                TGuiV2 grip_pos = widget->container.horizontal_grip.pos;
+                grip_pos.x = widget->container.horizontal_value * ( widget->container.dimension.x - widget->container.horizontal_grip.width*0.5f);
+                grip_cmd.descriptor.pos = tgui_v2_add(widget_abs_pos, grip_pos);
+                grip_cmd.descriptor.dim = widget->container.horizontal_grip.dim;
+                if(widget->container.total_dimension.x)
+                {
+                    grip_cmd.descriptor.dim.x = (widget->container.dimension.x / widget->container.total_dimension.x) * widget->container.horizontal_grip.width;
+                }
+                grip_cmd.color = TGUI_GREEN;
+                tgui_push_draw_command(grip_cmd);
             }
             
             // NOTE: push start clipping command

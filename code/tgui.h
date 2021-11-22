@@ -228,10 +228,13 @@ typedef struct TGuiWidgetContainer
     TGuiContanerFlags flags;
     TGuiWidgetLayout layout;
     TGuiV2 dimension;
+    TGuiV2 total_dimension;
     TGuiRect vertical_grip;
     TGuiRect horizontal_grip;
     f32 vertical_value;
     f32 horizontal_value;
+    b32 grabbing_x;
+    b32 grabbing_y;
     b32 visible;
 } TGuiWidgetContainer;
 
