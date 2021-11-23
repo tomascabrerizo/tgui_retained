@@ -90,9 +90,7 @@ int main(int argc, char** argv)
 {
     UNUSED_VAR(argc);
     UNUSED_VAR(argv);
-
-    printf("[INFO]: widget size %llu\n", sizeof(TGuiWidget));
-    
+ 
     WNDCLASSA window_class = {0};
     window_class.style = CS_HREDRAW|CS_VREDRAW|CS_OWNDC;
     window_class.lpfnWndProc = win32_window_proc;
@@ -153,20 +151,34 @@ int main(int argc, char** argv)
     // NOTE: init TGUI lib
     tgui_init(&tgui_backbuffer, &test_font);
     
-    TGuiHandle frame1 = tgui_create_container(100, 100, 0, 0, TGUI_CONTAINER_DYNAMIC, TGUI_LAYOUT_VERTICAL, true, 20);
-    TGuiHandle frame2 = tgui_create_container(400, 120, 100, 240, TGUI_CONTAINER_V_SCROLL|TGUI_CONTAINER_H_SCROLL, TGUI_LAYOUT_VERTICAL, true, 20);
+    TGuiHandle frame1 = tgui_create_container(100, 100, 0, 0, TGUI_CONTAINER_DYNAMIC, TGUI_LAYOUT_VERTICAL, true, 10);
+    TGuiHandle frame2 = tgui_create_container(450, 120, 100, 240, TGUI_CONTAINER_V_SCROLL|TGUI_CONTAINER_H_SCROLL, TGUI_LAYOUT_VERTICAL, true, 20);
     tgui_widget_to_root(frame1);
     tgui_widget_to_root(frame2);
 
-    TGuiHandle button_box = tgui_create_container(0, 0, 0, 0, TGUI_CONTAINER_DYNAMIC, TGUI_LAYOUT_HORIZONTAL, false, 5);
+    TGuiHandle button_box = tgui_create_container(0, 0, 0, 0, TGUI_CONTAINER_DYNAMIC, TGUI_LAYOUT_HORIZONTAL, false, 15);
     tgui_container_add_widget(frame1, button_box);
-    TGuiHandle slider_box = tgui_create_container(0, 0, 0, 0, TGUI_CONTAINER_DYNAMIC, TGUI_LAYOUT_VERTICAL, false, 5);
+    TGuiHandle slider_box = tgui_create_container(0, 0, 0, 0, TGUI_CONTAINER_DYNAMIC, TGUI_LAYOUT_VERTICAL, false, 10);
     tgui_container_add_widget(frame1, slider_box);
+    TGuiHandle checkbox_box = tgui_create_container(0, 0, 0, 0, TGUI_CONTAINER_DYNAMIC, TGUI_LAYOUT_HORIZONTAL, false, 15);
+    tgui_container_add_widget(frame1, checkbox_box);
 
-    TGuiHandle button = tgui_create_button("button");
-    tgui_container_add_widget(button_box, button);
-    TGuiHandle slider = tgui_create_slider();
-    tgui_container_add_widget(slider_box, slider);
+    TGuiHandle button1 = tgui_create_button("button 1");
+    TGuiHandle button2 = tgui_create_button("button 2");
+    tgui_container_add_widget(button_box, button1);
+    tgui_container_add_widget(button_box, button2);
+    
+    TGuiHandle slider1 = tgui_create_slider();
+    TGuiHandle slider2 = tgui_create_slider();
+    tgui_container_add_widget(slider_box, slider1);
+    tgui_container_add_widget(slider_box, slider2);
+    
+    TGuiHandle checkbox1 = tgui_create_checkbox("box 1");
+    TGuiHandle checkbox2 = tgui_create_checkbox("box 2");
+    TGuiHandle checkbox3 = tgui_create_checkbox("box 3");
+    tgui_container_add_widget(checkbox_box, checkbox1);
+    tgui_container_add_widget(checkbox_box, checkbox2);
+    tgui_container_add_widget(checkbox_box, checkbox3);
     
     #define BUTTONS_COUNT 8
     TGuiHandle buttons[BUTTONS_COUNT];
@@ -176,6 +188,10 @@ int main(int argc, char** argv)
         tgui_container_add_widget(frame2, buttons[i]);
     }
     
+    printf("[INFO]: widget size %llu (bytes)\n", sizeof(TGuiWidget));
+    printf("[INFO]: total allocated used %llu (bytes)\n", tgui_global_state.widget_allocator.count*sizeof(TGuiWidget));
+    printf("[INFO]: total allocated size %llu (bytes)\n", tgui_global_state.widget_allocator.buffer_size*sizeof(TGuiWidget));
+
     while(global_running)
     {
         LARGE_INTEGER large_current_time;
