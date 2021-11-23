@@ -190,6 +190,7 @@ typedef enum TGuiContanerFlags
     TGUI_CONTAINER_V_SCROLL  = 1 << 1,
     TGUI_CONTAINER_H_SCROLL  = 1 << 2,
     TGUI_CONTAINER_DRAGGABLE = 1 << 3,
+    TGUI_CONTAINER_RESIZABLE = 1 << 4,
 } TGuiContanerFlags;
 
 typedef struct TGuiWidgetLayout
@@ -235,25 +236,16 @@ typedef struct TGuiWidgetContainer
     f32 horizontal_value;
     b32 grabbing_x;
     b32 grabbing_y;
+    b32 dragging;
     b32 visible;
 } TGuiWidgetContainer;
-
-#if 0
-typedef struct TGuiWidgetScrollContainer
-{
-    TGuiWidgetHeader header;
-    //----------------------
-    b32 visible;
-    TGuiV2 dimension;
-    TGuiV2 grip_dimension;
-    f32 value;
-} TGuiWidgetScrollContainer;
-#endif
 
 typedef struct TGuiWidgetButton
 {
     TGuiWidgetHeader header;
     //----------------------
+    b32 hot;
+    b32 active;
     b32 pressed;
     TGuiText text;
 } TGuiWidgetButton;
@@ -322,9 +314,6 @@ typedef struct TGuiState
     TGuiWidgetPoolAllocator widget_allocator;
     TGuiHandle first_root;
     TGuiHandle last_root;
-    TGuiHandle active;
-    TGuiHandle focus;
-    TGuiHandle last_focus;
 } TGuiState;
 // TODO: Maybe the state should be provided by the application?
 // NOTE: global state (stores all internal state of the GUI)
@@ -333,7 +322,7 @@ extern TGuiState tgui_global_state;
 //-----------------------------------------------------
 // NOTE: GUI lib functions
 //-----------------------------------------------------
-typedef void (*TGuiWidgetFP)(TGuiHandle handle);
+typedef b32 (*TGuiWidgetFP)(TGuiHandle handle);
 
 TGUI_API TGuiHandle tgui_create_container(i32 x, i32 y, i32 width, i32 height, TGuiContanerFlags flags, TGuiLayoutType layout, b32 visible, u32 padding);
 TGUI_API TGuiHandle tgui_create_button(char *label);
@@ -343,9 +332,10 @@ TGUI_API void tgui_container_add_widget(TGuiHandle container_handle, TGuiHandle 
 TGUI_API void tgui_widget_to_root(TGuiHandle widget_handle);
 TGUI_API void tgui_set_widget_position(TGuiHandle widget_handle, f32 x, f32 y);
 
-void tgui_widget_update(TGuiHandle handle);
-void tgui_widget_render(TGuiHandle handle);
-void tgui_widget_recursive_descent_first_to_last(TGuiHandle handle, TGuiWidgetFP function);
+b32 tgui_widget_update(TGuiHandle handle);
+b32 tgui_widget_render(TGuiHandle handle);
+void tgui_widget_recursive_descent_pre_first_to_last(TGuiHandle handle, TGuiWidgetFP function);
+b32 tgui_widget_recursive_descent_pos_first_to_last(TGuiHandle handle, TGuiWidgetFP function);
 void tgui_widget_recursive_descent_last_to_first(TGuiHandle handle, TGuiWidgetFP function);
 TGuiV2 tgui_widget_abs_pos(TGuiHandle handle);
 

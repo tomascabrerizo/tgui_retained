@@ -151,7 +151,7 @@ int main(int argc, char** argv)
     // NOTE: init TGUI lib
     tgui_init(&tgui_backbuffer, &test_font);
     
-    TGuiHandle frame1 = tgui_create_container(100, 100, 150, 200, TGUI_CONTAINER_V_SCROLL|TGUI_CONTAINER_H_SCROLL, TGUI_LAYOUT_VERTICAL, true, 10);
+    TGuiHandle frame1 = tgui_create_container(100, 100, 150, 200, TGUI_CONTAINER_DYNAMIC|TGUI_CONTAINER_DRAGGABLE, TGUI_LAYOUT_VERTICAL, true, 10);
     TGuiHandle frame2 = tgui_create_container(450, 120, 100, 240, TGUI_CONTAINER_V_SCROLL|TGUI_CONTAINER_H_SCROLL, TGUI_LAYOUT_VERTICAL, true, 20);
     tgui_widget_to_root(frame1);
     tgui_widget_to_root(frame2);

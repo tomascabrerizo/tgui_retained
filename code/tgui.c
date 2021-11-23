@@ -396,11 +396,83 @@ void tgui_container_add_widget(TGuiHandle container_handle, TGuiHandle widget_ha
     tgui_container_recalculate_widget_position(container);
 }
 
-static void tgui_container_update_scroll(TGuiWidgetContainer *container, TGuiV2 mouse, TGuiV2 widget_abs_pos)
+static TGuiRect tgui_widget_get_collision_box(TGuiWidget *widget)
+{
+    TGuiRect collision_box = {0};
+    collision_box.pos = tgui_widget_abs_pos(widget->header.handle);
+    if(widget->header.type == TGUI_CHECKBOX)
+    {
+        collision_box.dim = widget->checkbox.box_dimension;
+    }
+    else if(widget->header.type == TGUI_SLIDER)
+    {
+        collision_box.x += (widget->slider.value * widget->header.size.x) - (widget->slider.grip_dimension.x*0.5f); 
+        collision_box.dim = widget->slider.grip_dimension;
+    }
+    else if(widget->header.type == TGUI_CONTAINER)
+    {
+        collision_box.dim = widget->container.dimension;
+    }
+    else if(widget->header.type == TGUI_BUTTON)
+    {
+        collision_box.dim = widget->header.size;
+    }
+    else
+    {
+        collision_box.dim = widget->header.size;
+    }
+    return collision_box;
+}
+
+static TGuiWidgetContainer *tgui_widget_get_container(TGuiWidget *widget)
+{
+    while(widget->header.parent)
+    {
+        widget = tgui_widget_get(widget->header.parent);
+    }
+    ASSERT(widget->header.type == TGUI_CONTAINER);
+    return &widget->container;
+}
+
+// TODO: this function must move the container to the las position nost first
+static void tgui_container_set_to_top(TGuiWidgetContainer *container)
 {
     TGuiState *state = &tgui_global_state;
+    TGuiWidget *first = tgui_widget_get(state->first_root);
+    TGuiWidget *prev = tgui_widget_get(container->header.sibling_prev);
+    TGuiWidget *next = tgui_widget_get(container->header.sibling_next);
+    if(container->header.handle != state->first_root)
+    {
+        if(container->header.handle == state->last_root)
+        {
+            prev->header.sibling_next = 0; 
+            state->last_root = prev->header.handle;
+        }
+        else
+        {
+            next->header.sibling_prev = prev->header.handle; 
+            prev->header.sibling_next = next->header.handle; 
+        }
+
+        container->header.sibling_prev = 0;
+        container->header.sibling_next = state->first_root;
+        first->header.sibling_prev = container->header.handle;
+        state->first_root = container->header.handle;
+    }
+}
+
+static b32 tgui_container_update_scroll(TGuiState *state, TGuiWidgetContainer *container)
+{
+    b32 result = false;
+    
+    // TODO: use tgui_widget_get_collision_box here
+    TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y); 
+    TGuiV2 widget_abs_pos = tgui_widget_abs_pos(container->header.handle);
+    
     if(container->flags & TGUI_CONTAINER_V_SCROLL)
     {
+        result = true;
+
         TGuiRect backgrip = {0};
         backgrip.pos = tgui_v2_add(widget_abs_pos, container->vertical_grip.pos);
         backgrip.dim = container->vertical_grip.dim;
@@ -440,6 +512,8 @@ static void tgui_container_update_scroll(TGuiWidgetContainer *container, TGuiV2 
     
     if(container->flags & TGUI_CONTAINER_H_SCROLL)
     {
+        result = true;
+
         TGuiRect backgrip = {0};
         backgrip.pos = tgui_v2_add(widget_abs_pos, container->horizontal_grip.pos);
         backgrip.dim = container->horizontal_grip.dim;
@@ -478,131 +552,133 @@ static void tgui_container_update_scroll(TGuiWidgetContainer *container, TGuiV2 
             }
         }
     }
+    // TODO: only recalculate child positions
+    tgui_container_recalculate_widget_position(container);
+    return result;
 }
 
-void tgui_widget_update(TGuiHandle handle)
+static b32 tgui_container_update_dragg_position(TGuiState *state, TGuiWidgetContainer *container)
 {
-    TGuiState *state = &tgui_global_state;
-    TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y); 
-
+    b32 result = false;
     
-    TGuiWidget *widget = tgui_widget_get(handle);
-    // NOTE: if the mouse is not in the parent containar, dont event update the widget
-    if(widget->header.parent)
-    {
-        TGuiWidget *parent = tgui_widget_get(widget->header.parent);
-        ASSERT(parent->header.type == TGUI_CONTAINER);
-        TGuiV2 widget_abs_pos = tgui_widget_abs_pos(widget->header.parent);
-        TGuiRect container_box = tgui_rect_xywh(widget_abs_pos.x, widget_abs_pos.y, parent->container.dimension.x, parent->container.dimension.y);
-        if(!tgui_point_inside_rect(mouse, container_box)) return;
-    }
+    // TODO: use tgui_widget_get_collision_box here
+    TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y); 
+    TGuiV2 last_mouse = tgui_v2(state->last_mouse_x, state->last_mouse_y); 
+    TGuiV2 widget_abs_pos = tgui_widget_abs_pos(container->header.handle);
 
-    TGuiV2 widget_abs_pos = tgui_widget_abs_pos(handle);
-    TGuiRect widget_rect;
-    widget_rect.pos = widget_abs_pos;
-    // TODO: IMPORTANT!!!!
-    // TODO: create a bouding box in header
-    if(widget->header.type == TGUI_CHECKBOX)
+    if(container->flags & TGUI_CONTAINER_DRAGGABLE)
     {
-        widget_rect.dim = widget->checkbox.box_dimension;
+        TGuiRect container_box = {0};
+        container_box.pos = widget_abs_pos;
+        container_box.dim = container->dimension;
+        if(tgui_point_inside_rect(mouse, container_box) && state->mouse_down)
+        {
+            container->dragging = true; 
+        }
+        if(state->mouse_up)
+        {
+            container->dragging = false; 
+            return false;
+        }
+        if(container->dragging)
+        {
+            TGuiV2 mouse_rel = tgui_v2_sub(mouse, widget_abs_pos);
+            TGuiV2 last_mouse_rel = tgui_v2_sub(last_mouse, widget_abs_pos);
+            TGuiV2 mouse_offset = tgui_v2_sub(mouse_rel, last_mouse_rel);
+            container->header.position = tgui_v2_add(container->header.position, mouse_offset);
+        }
+        result = true;
     }
-    else if(widget->header.type == TGUI_SLIDER)
+    return result;
+}
+
+static b32 tgui_button_update(TGuiState *state, TGuiWidgetButton *button)
+{
+    TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y); 
+    
+    TGuiRect button_box = tgui_widget_get_collision_box((TGuiWidget *)button);  
+    if(tgui_point_inside_rect(mouse, button_box))
     {
-        widget_rect.x += (widget->slider.value * widget->header.size.x) - (widget->slider.grip_dimension.x*0.5f); 
-        widget_rect.dim = widget->slider.grip_dimension;
+        button->hot = true;
     }
     else
     {
-        widget_rect.dim = widget->header.size;
+        button->hot = false;
     }
-    if(tgui_point_inside_rect(mouse, widget_rect))
+
+    if(button->hot && state->mouse_down)
     {
-        state->focus = handle;
+        button->active = true;
     }
     
-    // TODO: maybe a better way to handle on top containers is walk the tree from last_child to first_child
-    // and return on the first event
-    b32 is_active = state->active == widget->header.handle;
-    b32 is_focus = state->focus == widget->header.handle;
-    b32 was_focus = state->last_focus == widget->header.handle;
+    if(!button->hot && state->mouse_up)
+    {
+        button->active = false;
+    }
+
+    if(button->hot && button->active && state->mouse_up)
+    {
+        button->pressed = true;
+        button->active = false;
+    }
+    else
+    {
+        button->pressed = false;
+    }
+    
+    if(button->hot || button->active)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+b32 tgui_widget_update(TGuiHandle handle)
+{
+    TGuiState *state = &tgui_global_state;
+    TGuiWidget *widget = tgui_widget_get(handle);
+
     switch(widget->header.type)
     {
         case TGUI_CONTAINER:
         {
-            tgui_container_update_scroll(&widget->container, mouse, widget_abs_pos);
-            tgui_container_recalculate_widget_position(&widget->container);
+            b32 result = false;
+            result = tgui_container_update_scroll(state, &widget->container);
+            result = tgui_container_update_dragg_position(state, &widget->container) && result;
+            return result;
         }break;
         case TGUI_END_CONTAINER:
-        {}break;
+        { }break;
         case TGUI_BUTTON:
         {
-            widget->button.pressed = false;
-            if(was_focus && state->mouse_down)
-            {
-                state->active = widget->header.handle;
-            }
-            if(is_active && was_focus && state->mouse_up)
-            {
-                widget->button.pressed = true;
-                
-            }
-            if(is_active && !is_focus)
-            {
-                state->active = 0;
-            }
+            b32 result = false;
+            result = tgui_button_update(state, &widget->button);
+            return result;
         }break;
         case TGUI_CHECKBOX:
         {
-            if(was_focus && state->mouse_down)
-            {
-                state->active = widget->header.handle;
-            }
-            if(is_active && was_focus && state->mouse_up)
-            {
-                widget->checkbox.active = !widget->checkbox.active;
-                
-            }
-            if(is_active && !is_focus)
-            {
-                state->active = 0;
-            }
+            return false;
         }break;
         case TGUI_SLIDER:
         {
-            f32 mouse_x_rel = (mouse.x - widget_abs_pos.x) / widget->header.size.x;
-            if(is_focus && state->mouse_is_down)
-            {
-                state->active = widget->header.handle;
-            }
-            if(is_active)
-            {
-                if(mouse_x_rel < 0.0f)
-                {
-                    mouse_x_rel = 0;
-                }
-                if(mouse_x_rel > 1.0f)
-                {
-                    mouse_x_rel = 1.0f;
-                }
-                widget->slider.value = mouse_x_rel; 
-            }
-            if(is_active && state->mouse_up)
-            {
-                state->active = 0;
-            }
+            return false;
         }break;
         case TGUI_COUNT:
         {
             ASSERT(!"invalid code path");
         }break;
     }
+
+    return false;
 }
 
-void tgui_widget_render(TGuiHandle handle)
+b32 tgui_widget_render(TGuiHandle handle)
 {
     TGuiWidget *widget = tgui_widget_get(handle);
     TGuiV2 widget_abs_pos = tgui_widget_abs_pos(handle);
-    TGuiState *state = &tgui_global_state;
     
     switch(widget->header.type)
     {
@@ -694,19 +770,10 @@ void tgui_widget_render(TGuiHandle handle)
             draw_cmd.descriptor.dim = widget->header.size;
             
             TGuiWidgetButton *button_data = &widget->button;
-            u32 color = TGUI_GREY; 
-            if(state->focus == widget->header.handle)
-            {
-                color = TGUI_GREEN;
-            }
-            if(state->active == widget->header.handle)
-            {
-                color = TGUI_ORANGE;
-            }
-            if(widget->button.pressed)
-            {
-                color = TGUI_RED;
-            }
+            u32 color = TGUI_GREY;
+            if(widget->button.hot) color = TGUI_ORANGE;
+            if(widget->button.active) color = TGUI_GREEN;
+            if(widget->button.pressed) color = TGUI_RED;
             draw_cmd.color = color;
             tgui_push_draw_command(draw_cmd);
                 
@@ -776,20 +843,47 @@ void tgui_widget_render(TGuiHandle handle)
             ASSERT(!"invalid code path");
         } break;
     }
+    return false;
 }
 
-void tgui_widget_recursive_descent_first_to_last(TGuiHandle handle, TGuiWidgetFP function)
+void tgui_widget_recursive_descent_pre_first_to_last(TGuiHandle handle, TGuiWidgetFP function)
 {
     TGuiWidget *widget = tgui_widget_get(handle);
     while(widget)
     {
-        function(widget->header.handle);
+        if(function(widget->header.handle))
+        {
+            // NOTE: if the return true we dont need to keep calling it
+            return;
+        }
         if(widget->header.child_first)
         {
-            tgui_widget_recursive_descent_first_to_last(widget->header.child_first, function);
+            tgui_widget_recursive_descent_pre_first_to_last(widget->header.child_first, function);
         }
         widget = tgui_widget_get(widget->header.sibling_next);
     }
+}
+
+b32 tgui_widget_recursive_descent_pos_first_to_last(TGuiHandle handle, TGuiWidgetFP function)
+{
+    TGuiWidget *widget = tgui_widget_get(handle);
+    while(widget)
+    {
+        if(widget->header.child_first)
+        {
+            if(tgui_widget_recursive_descent_pos_first_to_last(widget->header.child_first, function))
+            {
+                return true;
+            }
+        }
+        if(function(widget->header.handle))
+        {
+            // NOTE: if the return true we dont need to keep calling it
+            return true;;
+        }
+        widget = tgui_widget_get(widget->header.sibling_next);
+    }
+    return false;
 }
 
 void tgui_widget_recursive_descent_last_to_first(TGuiHandle handle, TGuiWidgetFP function)
@@ -992,10 +1086,8 @@ void tgui_update(void)
     state->event_queue.count = 0;
     
     // NOTE: update all widget in the state widget tree
-    state->last_focus = state->focus;
-    state->focus = 0;
-    tgui_widget_recursive_descent_first_to_last(state->first_root, tgui_widget_update);
-    tgui_widget_recursive_descent_first_to_last(state->first_root, tgui_widget_render);
+    tgui_widget_recursive_descent_pos_first_to_last(state->first_root, tgui_widget_update);
+    tgui_widget_recursive_descent_pre_first_to_last(state->first_root, tgui_widget_render);
 }
 
 void tgui_draw_command_buffer(void)
