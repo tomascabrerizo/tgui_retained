@@ -396,6 +396,90 @@ void tgui_container_add_widget(TGuiHandle container_handle, TGuiHandle widget_ha
     tgui_container_recalculate_widget_position(container);
 }
 
+static void tgui_container_update_scroll(TGuiWidgetContainer *container, TGuiV2 mouse, TGuiV2 widget_abs_pos)
+{
+    TGuiState *state = &tgui_global_state;
+    if(container->flags & TGUI_CONTAINER_V_SCROLL)
+    {
+        TGuiRect backgrip = {0};
+        backgrip.pos = tgui_v2_add(widget_abs_pos, container->vertical_grip.pos);
+        backgrip.dim = container->vertical_grip.dim;
+        TGuiRect grip = {0};
+        TGuiV2 grip_pos = container->vertical_grip.pos;
+        grip.dim = container->vertical_grip.dim;
+        
+        if(container->total_dimension.y)
+        {
+            grip.dim.y = (container->dimension.y / container->total_dimension.y) * container->vertical_grip.height;
+            grip_pos.y = container->vertical_value * (container->dimension.y - grip.dim.y);
+            grip.pos = tgui_v2_add(widget_abs_pos, grip_pos);
+            
+            if(tgui_point_inside_rect(mouse, grip) && state->mouse_down)
+            {
+                container->grabbing_y = true; 
+            }
+            if(state->mouse_up)
+            {
+                container->grabbing_y = false; 
+            }
+            if(container->grabbing_y)
+            {
+                f32 backgrip_size = (container->dimension.y - grip.dim.y);
+                if(backgrip_size > 1.0f)
+                {
+                    f32 mouse_y_rel = (state->mouse_y - backgrip.y) / backgrip_size;
+                    f32 last_mouse_y_rel = (state->last_mouse_y - backgrip.y) / backgrip_size;
+                    f32 y_offset = mouse_y_rel - last_mouse_y_rel; 
+                    container->vertical_value += y_offset;
+                    if(container->vertical_value < 0) container->vertical_value = 0;
+                    if(container->vertical_value > 1) container->vertical_value = 1;
+                }
+            }
+        }
+    }
+    
+    if(container->flags & TGUI_CONTAINER_H_SCROLL)
+    {
+        TGuiRect backgrip = {0};
+        backgrip.pos = tgui_v2_add(widget_abs_pos, container->horizontal_grip.pos);
+        backgrip.dim = container->horizontal_grip.dim;
+        TGuiRect grip = {0};
+        TGuiV2 grip_pos = container->horizontal_grip.pos;
+        grip.dim = container->horizontal_grip.dim;
+        
+        if(container->total_dimension.x)
+        {
+            f32 grip_ratio = (container->dimension.x / container->total_dimension.x);
+            if(grip_ratio > 1.0f) grip_ratio = 1.0f;
+            grip.dim.x = grip_ratio * container->horizontal_grip.width;
+            grip_pos.x = container->horizontal_value * (container->dimension.x - grip.dim.x);
+            grip.pos = tgui_v2_add(widget_abs_pos, grip_pos);
+            
+            if(tgui_point_inside_rect(mouse, grip) && state->mouse_down)
+            {
+                container->grabbing_x = true; 
+            }
+            if(state->mouse_up)
+            {
+                container->grabbing_x = false; 
+            }
+            if(container->grabbing_x)
+            {
+                f32 backgrip_size = (container->dimension.x - grip.dim.x);
+                if(backgrip_size > 0.0f)
+                {
+                    f32 mouse_x_rel = (state->mouse_x - backgrip.x) / backgrip_size;
+                    f32 last_mouse_x_rel = (state->last_mouse_x - backgrip.x) / backgrip_size;
+                    f32 x_offset = mouse_x_rel - last_mouse_x_rel; 
+                    container->horizontal_value += x_offset;
+                    if(container->horizontal_value < 0) container->horizontal_value = 0;
+                    if(container->horizontal_value > 1) container->horizontal_value = 1;
+                }
+            }
+        }
+    }
+}
+
 void tgui_widget_update(TGuiHandle handle)
 {
     TGuiState *state = &tgui_global_state;
@@ -445,75 +529,7 @@ void tgui_widget_update(TGuiHandle handle)
     {
         case TGUI_CONTAINER:
         {
-            if(widget->container.flags & TGUI_CONTAINER_V_SCROLL)
-            {
-                TGuiRect backgrip;
-                backgrip.pos = tgui_v2_add(widget_abs_pos, widget->container.vertical_grip.pos);
-                backgrip.dim = widget->container.vertical_grip.dim;
-                
-                TGuiRect grip;
-                TGuiV2 grip_pos = widget->container.vertical_grip.pos;
-                grip.dim = widget->container.vertical_grip.dim;
-                
-                if(widget->container.total_dimension.y)
-                {
-                    grip.dim.y = (widget->container.dimension.y / widget->container.total_dimension.y) * widget->container.vertical_grip.height;
-                    grip_pos.y = widget->container.vertical_value * (widget->container.dimension.y - grip.dim.y);
-                    grip.pos = tgui_v2_add(widget_abs_pos, grip_pos);
-                    
-                    if(tgui_point_inside_rect(mouse, grip) && state->mouse_down)
-                    {
-                        widget->container.grabbing_y = true; 
-                    }
-                    if(state->mouse_up)
-                    {
-                        widget->container.grabbing_y = false; 
-                    }
-                    if(widget->container.grabbing_y)
-                    {
-                        f32 mouse_y_rel = (state->mouse_y - backgrip.y) / (widget->container.dimension.y - grip.dim.y);
-                        f32 last_mouse_y_rel = (state->last_mouse_y - backgrip.y) / (widget->container.dimension.y - grip.dim.y);
-                        f32 y_offset = mouse_y_rel - last_mouse_y_rel; 
-                        widget->container.vertical_value += y_offset;
-                        if(widget->container.vertical_value < 0) widget->container.vertical_value = 0;
-                        if(widget->container.vertical_value > 1) widget->container.vertical_value = 1;
-                    }
-                }
-            }
-
-            if(widget->container.flags & TGUI_CONTAINER_H_SCROLL)
-            {
-                TGuiRect backgrip;
-                backgrip.pos = tgui_v2_add(widget_abs_pos, widget->container.horizontal_grip.pos);
-                backgrip.dim = widget->container.horizontal_grip.dim;
-                
-                TGuiRect grip;
-                TGuiV2 grip_pos = widget->container.horizontal_grip.pos;
-                grip_pos.x = widget->container.horizontal_value * ( widget->container.dimension.x - widget->container.horizontal_grip.width*0.5f);
-                grip.pos = tgui_v2_add(widget_abs_pos, grip_pos);
-                grip.dim = widget->container.horizontal_grip.dim;
-                if(widget->container.total_dimension.x)
-                {
-                    grip.dim.x = (widget->container.dimension.x / widget->container.total_dimension.x) * widget->container.horizontal_grip.width;
-                    if(tgui_point_inside_rect(mouse, grip) && state->mouse_down)
-                    {
-                        widget->container.grabbing_x = true; 
-                    }
-                    if(state->mouse_up)
-                    {
-                        widget->container.grabbing_x = false; 
-                    }
-                    if(widget->container.grabbing_x)
-                    {
-                        f32 mouse_x_rel = (state->mouse_x - backgrip.x) / (widget->container.dimension.x - grip.dim.x);
-                        f32 last_mouse_x_rel = (state->last_mouse_x - backgrip.x) / (widget->container.dimension.x - grip.dim.x);
-                        f32 x_offset = mouse_x_rel - last_mouse_x_rel; 
-                        widget->container.horizontal_value += x_offset;
-                        if(widget->container.horizontal_value < 0) widget->container.horizontal_value = 0;
-                        if(widget->container.horizontal_value > 1) widget->container.horizontal_value = 1;
-                    }
-                }
-            }
+            tgui_container_update_scroll(&widget->container, mouse, widget_abs_pos);
             tgui_container_recalculate_widget_position(&widget->container);
         }break;
         case TGUI_END_CONTAINER:
@@ -622,7 +638,9 @@ void tgui_widget_render(TGuiHandle handle)
                 grip_cmd.descriptor.dim = widget->container.vertical_grip.dim;
                 if(widget->container.total_dimension.y)
                 {
-                    grip_cmd.descriptor.dim.y = (widget->container.dimension.y / widget->container.total_dimension.y) * widget->container.vertical_grip.height;
+                    f32 grip_ratio = (widget->container.dimension.y / widget->container.total_dimension.y);
+                    if(grip_ratio > 1.0f) grip_ratio = 1.0f; 
+                    grip_cmd.descriptor.dim.y = grip_ratio * widget->container.vertical_grip.height;
                 }
                 grip_pos.y = widget->container.vertical_value * (widget->container.dimension.y - grip_cmd.descriptor.dim.y);
                 grip_cmd.descriptor.pos = tgui_v2_add(widget_abs_pos, grip_pos);
@@ -646,7 +664,9 @@ void tgui_widget_render(TGuiHandle handle)
                 grip_cmd.descriptor.dim = widget->container.horizontal_grip.dim;
                 if(widget->container.total_dimension.x)
                 {
-                    grip_cmd.descriptor.dim.x = (widget->container.dimension.x / widget->container.total_dimension.x) * widget->container.horizontal_grip.width;
+                    f32 grip_ratio = (widget->container.dimension.x / widget->container.total_dimension.x);
+                    if(grip_ratio > 1.0f) grip_ratio = 1.0f; 
+                    grip_cmd.descriptor.dim.x = grip_ratio  * widget->container.horizontal_grip.width;
                 }
                 grip_pos.x = widget->container.horizontal_value * (widget->container.dimension.x - grip_cmd.descriptor.dim.x);
                 grip_cmd.descriptor.pos = tgui_v2_add(widget_abs_pos, grip_pos);
@@ -654,24 +674,17 @@ void tgui_widget_render(TGuiHandle handle)
                 tgui_push_draw_command(grip_cmd);
             }
 
-            if(widget->container.flags & (TGUI_CONTAINER_V_SCROLL | TGUI_CONTAINER_H_SCROLL))
-            {
-                TGuiDrawCommand start_clip_cmd = {0};
-                start_clip_cmd.type = TGUI_DRAWCMD_START_CLIPPING;
-                start_clip_cmd.descriptor.pos = widget_abs_pos;
-                start_clip_cmd.descriptor.dim = widget->container.dimension;
-                tgui_push_draw_command(start_clip_cmd);
-            }
+            TGuiDrawCommand start_clip_cmd = {0};
+            start_clip_cmd.type = TGUI_DRAWCMD_START_CLIPPING;
+            start_clip_cmd.descriptor.pos = widget_abs_pos;
+            start_clip_cmd.descriptor.dim = widget->container.dimension;
+            tgui_push_draw_command(start_clip_cmd);
         } break;
         case TGUI_END_CONTAINER:
         {
-            TGuiWidget *parent = tgui_widget_get(widget->header.parent);
-            if(parent->container.flags & (TGUI_CONTAINER_V_SCROLL | TGUI_CONTAINER_H_SCROLL))
-            {
-                TGuiDrawCommand end_clip_cmd = {0};
-                end_clip_cmd.type = TGUI_DRAWCMD_END_CLIPPING;
-                tgui_push_draw_command(end_clip_cmd);
-            }
+            TGuiDrawCommand end_clip_cmd = {0};
+            end_clip_cmd.type = TGUI_DRAWCMD_END_CLIPPING;
+            tgui_push_draw_command(end_clip_cmd);
         } break;
         case TGUI_BUTTON:
         {
@@ -796,60 +809,6 @@ void tgui_widget_recursive_descent_last_to_first(TGuiHandle handle, TGuiWidgetFP
 //-----------------------------------------------------
 //  NOTE: memory management functions
 //-----------------------------------------------------
-
-// TODO: move clipping stack to software rendering code
-void tgui_clipping_stack_create(TGuiClippingStack *stack)
-{
-    stack->buffer_size = TGUI_DEFAULT_CLIPPING_STACK_SIZE;
-    stack->buffer = (TGuiRect *)malloc(stack->buffer_size*sizeof(TGuiRect));
-    stack->top = 0;
-}
-
-void tgui_clipping_stack_destoy(TGuiClippingStack *stack)
-{
-    free(stack->buffer);
-    stack->buffer = 0;
-    stack->buffer_size = 0;
-    stack->top = 0;
-}
-
-void tgui_clipping_stack_push(TGuiClippingStack *stack, TGuiRect clipping)
-{
-    // TODO: remove this ASSERT();
-    ASSERT(stack->buffer_size < 16);
-
-    if(stack->top == stack->buffer_size)
-    {
-        u32 new_buffer_size = stack->buffer_size * 2;
-        TGuiRect *new_buffer = (TGuiRect *)malloc(new_buffer_size*sizeof(TGuiRect));
-        memcpy(new_buffer, stack->buffer, stack->buffer_size*sizeof(TGuiRect));
-        free(stack->buffer);
-        stack->buffer = new_buffer;
-        stack->buffer_size = new_buffer_size;
-    }
-
-    stack->buffer[stack->top++] = clipping;
-}
-
-TGuiRect tgui_clipping_stack_pop(TGuiClippingStack *stack)
-{
-    TGuiRect result = (TGuiRect){0};
-    if(stack->top > 0)
-    {
-        result = stack->buffer[--stack->top];
-    }
-    return result;
-}
-
-TGuiRect tgui_clipping_stack_top(TGuiClippingStack *stack)
-{
-    TGuiRect result = (TGuiRect){0};
-    if(stack->top > 0)
-    {
-        result = stack->buffer[stack->top - 1];
-    }
-    return result;
-}
 
 void tgui_widget_poll_allocator_create(TGuiWidgetPoolAllocator *allocator)
 {
@@ -1246,6 +1205,82 @@ static TGuiClipResult tgui_clip_rect(i32 min_x, i32 min_y, i32 max_x, i32 max_y,
     result.offset_x = offset_x;
     result.offset_y = offset_y;
     
+    return result;
+}
+
+
+//-----------------------------------------------------
+// NOTE: rendering memory management
+//-----------------------------------------------------
+// TODO: move clipping stack to software rendering code
+void tgui_clipping_stack_create(TGuiClippingStack *stack)
+{
+    stack->buffer_size = TGUI_DEFAULT_CLIPPING_STACK_SIZE;
+    stack->buffer = (TGuiRect *)malloc(stack->buffer_size*sizeof(TGuiRect));
+    stack->top = 0;
+}
+
+void tgui_clipping_stack_destoy(TGuiClippingStack *stack)
+{
+    free(stack->buffer);
+    stack->buffer = 0;
+    stack->buffer_size = 0;
+    stack->top = 0;
+}
+
+void tgui_clipping_stack_push(TGuiClippingStack *stack, TGuiRect clipping)
+{
+    // TODO: remove this ASSERT();
+    ASSERT(stack->buffer_size < 16);
+
+    if(stack->top == stack->buffer_size)
+    {
+        u32 new_buffer_size = stack->buffer_size * 2;
+        TGuiRect *new_buffer = (TGuiRect *)malloc(new_buffer_size*sizeof(TGuiRect));
+        memcpy(new_buffer, stack->buffer, stack->buffer_size*sizeof(TGuiRect));
+        free(stack->buffer);
+        stack->buffer = new_buffer;
+        stack->buffer_size = new_buffer_size;
+    }
+    
+    if(stack->top > 0)
+    {
+        // NOTE: clip the new clipping rec to the old one
+        i32 min_x = clipping.x;
+        i32 min_y = clipping.y;
+        i32 max_x = min_x + clipping.width;
+        i32 max_y = min_y + clipping.height;
+
+        TGuiClipResult clipping_res = tgui_clip_rect(min_x, min_y, max_x, max_y, stack->buffer[stack->top-1]);
+        clipping.x = clipping_res.min_x;
+        clipping.y = clipping_res.min_y;
+        clipping.width = clipping_res.max_x - clipping_res.min_x;
+        clipping.height = clipping_res.max_y - clipping_res.min_y;
+        stack->buffer[stack->top++] = clipping;
+    }
+    else
+    {
+        stack->buffer[stack->top++] = clipping;
+    }
+}
+
+TGuiRect tgui_clipping_stack_pop(TGuiClippingStack *stack)
+{
+    TGuiRect result = (TGuiRect){0};
+    if(stack->top > 0)
+    {
+        result = stack->buffer[--stack->top];
+    }
+    return result;
+}
+
+TGuiRect tgui_clipping_stack_top(TGuiClippingStack *stack)
+{
+    TGuiRect result = (TGuiRect){0};
+    if(stack->top > 0)
+    {
+        result = stack->buffer[stack->top - 1];
+    }
     return result;
 }
 

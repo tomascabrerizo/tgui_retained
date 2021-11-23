@@ -390,7 +390,7 @@ typedef struct TGuiClippingStack
     u32 buffer_size;
     u32 top;
 } TGuiClippingStack;
-void tgui_clipping_stack_init(TGuiClippingStack *stack);
+void tgui_clipping_stack_create(TGuiClippingStack *stack);
 void tgui_clipping_stack_destoy(TGuiClippingStack *stack);
 void tgui_clipping_stack_push(TGuiClippingStack *stack, TGuiRect clipping);
 TGuiRect tgui_clipping_stack_pop(TGuiClippingStack *stack);
