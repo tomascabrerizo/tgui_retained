@@ -111,12 +111,16 @@ TGuiHandle tgui_create_container(i32 x, i32 y, i32 width, i32 height, TGuiContan
 {
     TGuiHandle handle = TGUI_INVALID_HANDLE;
     // NOTE: allocate end container at first so it not change the widget ptr we its allocated
-    TGuiHandle end_container_handle = tgui_create_end_container();
     TGuiWidget *widget = tgui_create_widget(&handle); 
     
     // NOTE: add end container widget to the last child
+    TGuiHandle end_container_handle = tgui_create_end_container();
+    // NOTE: update the widget pointer (can change with the new allocation)
+    widget = tgui_widget_get(handle);
     widget->header.child_first = end_container_handle;
     widget->header.child_last = end_container_handle;
+    TGuiWidget *end_container = tgui_widget_get(end_container_handle);
+    end_container->header.parent = handle;
     
     widget->header.type = TGUI_CONTAINER;
     widget->header.position = tgui_v2(x, y);
@@ -649,20 +653,25 @@ void tgui_widget_render(TGuiHandle handle)
                 grip_cmd.color = TGUI_GREEN;
                 tgui_push_draw_command(grip_cmd);
             }
-            
-            // NOTE: push start clipping command
-            TGuiDrawCommand start_clip_cmd = {0};
-            start_clip_cmd.type = TGUI_DRAWCMD_START_CLIPPING;
-            start_clip_cmd.descriptor.pos = widget_abs_pos;
-            start_clip_cmd.descriptor.dim = widget->container.dimension;
-            tgui_push_draw_command(start_clip_cmd);
+
+            if(widget->container.flags & (TGUI_CONTAINER_V_SCROLL | TGUI_CONTAINER_H_SCROLL))
+            {
+                TGuiDrawCommand start_clip_cmd = {0};
+                start_clip_cmd.type = TGUI_DRAWCMD_START_CLIPPING;
+                start_clip_cmd.descriptor.pos = widget_abs_pos;
+                start_clip_cmd.descriptor.dim = widget->container.dimension;
+                tgui_push_draw_command(start_clip_cmd);
+            }
         } break;
         case TGUI_END_CONTAINER:
         {
-            // NOTE: push end clipping command
-            TGuiDrawCommand end_clip_cmd = {0};
-            end_clip_cmd.type = TGUI_DRAWCMD_END_CLIPPING;
-            tgui_push_draw_command(end_clip_cmd);
+            TGuiWidget *parent = tgui_widget_get(widget->header.parent);
+            if(parent->container.flags & (TGUI_CONTAINER_V_SCROLL | TGUI_CONTAINER_H_SCROLL))
+            {
+                TGuiDrawCommand end_clip_cmd = {0};
+                end_clip_cmd.type = TGUI_DRAWCMD_END_CLIPPING;
+                tgui_push_draw_command(end_clip_cmd);
+            }
         } break;
         case TGUI_BUTTON:
         {
