@@ -27,11 +27,12 @@ typedef double f64;
 #define TGUI_API __declspec(dllexport)
 
 // NOTE: color pallete
-#define TGUI_BLACK  0xFF323031
-#define TGUI_ORANGE 0xFFF4AC45
-#define TGUI_RED    0xFFFF5154
-#define TGUI_GREY   0xFF8896AB
-#define TGUI_GREEN  0xFFC4EBC8
+#define TGUI_DRAK_BLACK  0xFF282728
+#define TGUI_BLACK       0xFF323031
+#define TGUI_ORANGE      0xFFF4AC45
+#define TGUI_RED         0xFFFF5154
+#define TGUI_GREY        0xFF8896AB
+#define TGUI_GREEN       0xFFC4EBC8
 
 // NOTE: handle to GUI widgets
 typedef u32 TGuiHandle;
@@ -254,7 +255,9 @@ typedef struct TGuiWidgetCheckBox
 {
     TGuiWidgetHeader header;
     //----------------------
+    b32 hot;
     b32 active;
+    b32 checked;
     TGuiText text;
     TGuiV2 box_dimension;
 } TGuiWidgetCheckBox;
@@ -263,6 +266,8 @@ typedef struct TGuiWidgetSlider
 {
     TGuiWidgetHeader header;
     //----------------------
+    b32 hot;
+    b32 active;
     f32 value;
     f32 ratio;
     TGuiV2 grip_dimension;
@@ -314,6 +319,8 @@ typedef struct TGuiState
     TGuiWidgetPoolAllocator widget_allocator;
     TGuiHandle first_root;
     TGuiHandle last_root;
+
+    TGuiHandle widget_active;
 } TGuiState;
 // TODO: Maybe the state should be provided by the application?
 // NOTE: global state (stores all internal state of the GUI)

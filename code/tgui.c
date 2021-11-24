@@ -489,10 +489,12 @@ static b32 tgui_container_update_scroll(TGuiState *state, TGuiWidgetContainer *c
             if(tgui_point_inside_rect(mouse, grip) && state->mouse_down)
             {
                 container->grabbing_y = true; 
+                state->widget_active = container->header.handle;
             }
             if(state->mouse_up)
             {
                 container->grabbing_y = false; 
+                state->widget_active = TGUI_INVALID_HANDLE;
             }
             if(container->grabbing_y)
             {
@@ -532,10 +534,12 @@ static b32 tgui_container_update_scroll(TGuiState *state, TGuiWidgetContainer *c
             if(tgui_point_inside_rect(mouse, grip) && state->mouse_down)
             {
                 container->grabbing_x = true; 
+                state->widget_active = container->header.handle;
             }
             if(state->mouse_up)
             {
                 container->grabbing_x = false; 
+                state->widget_active = TGUI_INVALID_HANDLE;
             }
             if(container->grabbing_x)
             {
@@ -560,7 +564,6 @@ static b32 tgui_container_update_scroll(TGuiState *state, TGuiWidgetContainer *c
 static b32 tgui_container_update_dragg_position(TGuiState *state, TGuiWidgetContainer *container)
 {
     b32 result = false;
-    
     // TODO: use tgui_widget_get_collision_box here
     TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y); 
     TGuiV2 last_mouse = tgui_v2(state->last_mouse_x, state->last_mouse_y); 
@@ -574,11 +577,12 @@ static b32 tgui_container_update_dragg_position(TGuiState *state, TGuiWidgetCont
         if(tgui_point_inside_rect(mouse, container_box) && state->mouse_down)
         {
             container->dragging = true; 
+            state->widget_active = container->header.handle;
         }
         if(state->mouse_up)
         {
             container->dragging = false; 
-            return false;
+            state->widget_active = TGUI_INVALID_HANDLE;
         }
         if(container->dragging)
         {
@@ -609,37 +613,135 @@ static b32 tgui_button_update(TGuiState *state, TGuiWidgetButton *button)
     if(button->hot && state->mouse_down)
     {
         button->active = true;
+        state->widget_active = button->header.handle;
     }
     
     if(!button->hot && state->mouse_up)
     {
         button->active = false;
+        state->widget_active = TGUI_INVALID_HANDLE;
     }
 
     if(button->hot && button->active && state->mouse_up)
     {
         button->pressed = true;
         button->active = false;
+        state->widget_active = TGUI_INVALID_HANDLE;
+        return true;
     }
     else
     {
         button->pressed = false;
     }
-    
-    if(button->hot || button->active)
+
+    if(button->active)
     {
         return true;
     }
+    return false;
+}
+
+static b32 tgui_checkbox_update(TGuiState *state, TGuiWidgetCheckBox *checkbox)
+{
+    TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y); 
+    
+    TGuiRect checkbox_box = tgui_widget_get_collision_box((TGuiWidget *)checkbox);  
+    if(tgui_point_inside_rect(mouse, checkbox_box))
+    {
+        checkbox->hot = true;
+    }
     else
     {
-        return false;
+        checkbox->hot = false;
     }
+    
+    if(checkbox->hot && state->mouse_down)
+    {
+        checkbox->active = true;
+        state->widget_active = checkbox->header.handle;
+    }
+    
+    if(!checkbox->hot && state->mouse_up)
+    {
+        checkbox->active = false;
+        state->widget_active = TGUI_INVALID_HANDLE;
+    }
+
+    if(checkbox->hot && checkbox->active && state->mouse_up)
+    {
+        checkbox->checked = !checkbox->checked;
+        checkbox->active = false;
+        state->widget_active = TGUI_INVALID_HANDLE;
+        return true;
+    }
+
+    if(checkbox->active)
+    {
+        return true;
+    }
+    return false;
+}
+
+static b32 tgui_slider_update(TGuiState *state, TGuiWidgetSlider *slider)
+{
+    TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y); 
+    TGuiRect slider_box = tgui_widget_get_collision_box((TGuiWidget *)slider);  
+    
+    if(tgui_point_inside_rect(mouse, slider_box))
+    {
+        slider->hot = true;
+    }
+    else
+    {
+        slider->hot = false;
+    }
+    
+    if(slider->hot && state->mouse_down)
+    {
+        slider->active = true;
+        state->widget_active = slider->header.handle;
+    }
+    
+    if(state->mouse_up)
+    {
+        slider->active = false;
+        state->widget_active = TGUI_INVALID_HANDLE;
+    }
+
+    if(slider->active)
+    {
+        f32 slider_size = slider->header.size.x;
+        if(slider_size > 0.0f)
+        {
+            f32 mouse_x_rel = (state->mouse_x - slider->header.position.x) / slider_size;
+            f32 last_mouse_x_rel = (state->last_mouse_x - slider->header.position.x) / slider_size;
+            f32 offset = mouse_x_rel - last_mouse_x_rel; 
+            slider->value += offset;
+            if(slider->value < 0) slider->value = 0;
+            if(slider->value > 1) slider->value = 1;
+        }
+        return true;
+    }
+    return false;
+}
+
+static b32 tgui_widget_is_active(TGuiHandle handle)
+{
+    TGuiState *state = &tgui_global_state;
+    if(!state->widget_active) return true;
+    if(state->widget_active != handle) return false;
+    return true;
 }
 
 b32 tgui_widget_update(TGuiHandle handle)
 {
     TGuiState *state = &tgui_global_state;
     TGuiWidget *widget = tgui_widget_get(handle);
+    
+    if(!tgui_widget_is_active(handle))
+    {
+        return false;
+    }
 
     switch(widget->header.type)
     {
@@ -651,20 +753,23 @@ b32 tgui_widget_update(TGuiHandle handle)
             return result;
         }break;
         case TGUI_END_CONTAINER:
-        { }break;
+        {
+            return false;
+        }break;
         case TGUI_BUTTON:
         {
-            b32 result = false;
-            result = tgui_button_update(state, &widget->button);
+            b32 result = tgui_button_update(state, &widget->button);
             return result;
         }break;
         case TGUI_CHECKBOX:
         {
-            return false;
+            b32 result = tgui_checkbox_update(state, &widget->checkbox);
+            return result;
         }break;
         case TGUI_SLIDER:
         {
-            return false;
+            b32 result = tgui_slider_update(state, &widget->slider);
+            return result;
         }break;
         case TGUI_COUNT:
         {
@@ -686,15 +791,17 @@ b32 tgui_widget_render(TGuiHandle handle)
         {
             TGuiDrawCommand draw_cmd = {0};
             draw_cmd.type = TGUI_DRAWCMD_RECT;
+            u32 color = TGUI_DRAK_BLACK;
             if(widget->container.flags & TGUI_CONTAINER_DYNAMIC) 
             {
                 draw_cmd.type = TGUI_DRAWCMD_ROUNDED_RECT;
                 draw_cmd.ratio = 16;
+                color = TGUI_BLACK;
             }
             draw_cmd.descriptor.pos = widget_abs_pos;
             // TODO: maybe create a tgui_get_container_dimension function
             draw_cmd.descriptor.dim = widget->container.dimension;
-            draw_cmd.color = TGUI_BLACK;
+            draw_cmd.color = color;
             tgui_push_draw_command(draw_cmd);
             
             if(widget->container.flags & TGUI_CONTAINER_V_SCROLL)
@@ -799,7 +906,7 @@ b32 tgui_widget_render(TGuiHandle handle)
             draw_cmd.ratio = 4;
 
             u32 color = TGUI_RED; 
-            if(checkbox_data->active)
+            if(checkbox_data->checked)
             {
                 color = TGUI_GREEN;
             }
