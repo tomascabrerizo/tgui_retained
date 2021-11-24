@@ -341,9 +341,10 @@ TGUI_API void tgui_set_widget_position(TGuiHandle widget_handle, f32 x, f32 y);
 
 b32 tgui_widget_update(TGuiHandle handle);
 b32 tgui_widget_render(TGuiHandle handle);
-void tgui_widget_recursive_descent_pre_first_to_last(TGuiHandle handle, TGuiWidgetFP function);
+b32 tgui_widget_recursive_descent_pre_first_to_last(TGuiHandle handle, TGuiWidgetFP function);
 b32 tgui_widget_recursive_descent_pos_first_to_last(TGuiHandle handle, TGuiWidgetFP function);
-void tgui_widget_recursive_descent_last_to_first(TGuiHandle handle, TGuiWidgetFP function);
+b32 tgui_widget_recursive_descent_pre_last_to_first(TGuiHandle handle, TGuiWidgetFP function);
+b32 tgui_widget_recursive_descent_pos_last_to_first(TGuiHandle handle, TGuiWidgetFP function);
 TGuiV2 tgui_widget_abs_pos(TGuiHandle handle);
 
 //-----------------------------------------------------

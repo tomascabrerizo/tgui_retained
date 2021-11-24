@@ -167,6 +167,7 @@ TGuiHandle tgui_create_container(i32 x, i32 y, i32 width, i32 height, TGuiContan
     TGuiHandle end_container_handle = tgui_create_end_container();
     // NOTE: update the widget pointer (can change with the new allocation)
     widget = tgui_widget_get(handle);
+    // NOTE: the end container widget need to be added at first because the render is right to left
     widget->header.child_first = end_container_handle;
     widget->header.child_last = end_container_handle;
     TGuiWidget *end_container = tgui_widget_get(end_container_handle);
@@ -284,35 +285,38 @@ static void tgui_container_set_container_total_size(TGuiWidgetContainer *contain
     // NOTE: resize the container
     TGuiV2 total_container_size = tgui_v2(0, 0);
     u32 num_child = 0;
-    while(widget && (widget->header.type != TGUI_END_CONTAINER))
+    while(widget)
     {
-        switch(container->layout.type)
+        if((widget->header.type != TGUI_END_CONTAINER))
         {
-            case TGUI_LAYOUT_VERTICAL:
+            switch(container->layout.type)
             {
-                if(widget->header.size.x > total_container_size.x)
+                case TGUI_LAYOUT_VERTICAL:
                 {
-                    total_container_size.x = widget->header.size.x;
-                }
-                total_container_size.y += widget->header.size.y;
-            } break;
-            case TGUI_LAYOUT_HORIZONTAL:
-            {
-                if(widget->header.size.y > total_container_size.y)
+                    if(widget->header.size.x > total_container_size.x)
+                    {
+                        total_container_size.x = widget->header.size.x;
+                    }
+                    total_container_size.y += widget->header.size.y;
+                } break;
+                case TGUI_LAYOUT_HORIZONTAL:
                 {
-                    total_container_size.y = widget->header.size.y;
-                }
-                total_container_size.x += widget->header.size.x;
-            } break;
-            case TGUI_LAYOUT_NONE:
-            {
-            } break;
-            case TGUI_LAYOUT_COUNT:
-            {
-                ASSERT(!"invalid code path");
-            } break;
+                    if(widget->header.size.y > total_container_size.y)
+                    {
+                        total_container_size.y = widget->header.size.y;
+                    }
+                    total_container_size.x += widget->header.size.x;
+                } break;
+                case TGUI_LAYOUT_NONE:
+                {
+                } break;
+                case TGUI_LAYOUT_COUNT:
+                {
+                    ASSERT(!"invalid code path");
+                } break;
+            }
+            ++num_child;
         }
-        ++num_child;
         widget = tgui_widget_get(widget->header.sibling_next);
     }
     // NOTE: add the container last padding
@@ -364,44 +368,48 @@ static void tgui_container_recalculate_dimension(TGuiWidgetContainer *container)
 
 static void tgui_container_set_childs_position(TGuiWidgetContainer *container, TGuiWidget *widget)
 {
-    TGuiHandle container_last_child = widget->header.sibling_prev;
-    widget = tgui_widget_get(container_last_child);
+    widget = tgui_widget_get(container->header.child_first);
+    TGuiHandle container_first_child = widget->header.sibling_next;
+    widget = tgui_widget_get(container_first_child);
     while(widget)
     {
         TGuiWidget *widget_prev = tgui_widget_get(widget->header.sibling_prev);
         TGuiWidget *widget_next = tgui_widget_get(widget->header.sibling_next);
-        TGuiV2 view_port_dimension = tgui_v2_sub(container->total_dimension, container->dimension);
-        if(container->layout.type == TGUI_LAYOUT_VERTICAL)
+        if((widget->header.type != TGUI_END_CONTAINER))
         {
-            if(widget->header.handle != container_last_child) 
+            TGuiV2 view_port_dimension = tgui_v2_sub(container->total_dimension, container->dimension);
+            if(container->layout.type == TGUI_LAYOUT_VERTICAL)
             {
-                widget->header.position.y = widget_next->header.position.y + widget_next->header.size.y + container->layout.padding;
-                widget->header.position.x = widget_next->header.position.x;
+                if(widget->header.handle != container_first_child) 
+                {
+                    widget->header.position.y = widget_prev->header.position.y + widget_prev->header.size.y + container->layout.padding;
+                    widget->header.position.x = widget_prev->header.position.x;
+                }
+                else
+                {
+                    widget->header.position.y = container->layout.padding;
+                    widget->header.position.y -= container->vertical_value * view_port_dimension.y;
+                    widget->header.position.x = container->layout.padding;
+                    widget->header.position.x -= container->horizontal_value * view_port_dimension.x;
+                }
             }
-            else
+            if(container->layout.type == TGUI_LAYOUT_HORIZONTAL)
             {
-                widget->header.position.y = container->layout.padding;
-                widget->header.position.y -= container->vertical_value * view_port_dimension.y;
-                widget->header.position.x = container->layout.padding;
-                widget->header.position.x -= container->horizontal_value * view_port_dimension.x;
+                if(widget->header.handle != container_first_child) 
+                {
+                    widget->header.position.x = widget_prev->header.position.x + widget_prev->header.size.x + container->layout.padding;
+                    widget->header.position.y = widget_prev->header.position.y;
+                }
+                else
+                {
+                    widget->header.position.x = container->layout.padding;
+                    widget->header.position.x -= container->horizontal_value * view_port_dimension.x;
+                    widget->header.position.y = container->layout.padding;
+                    widget->header.position.y -= container->vertical_value * view_port_dimension.y;
+                }
             }
         }
-        if(container->layout.type == TGUI_LAYOUT_HORIZONTAL)
-        {
-            if(widget->header.handle != container_last_child) 
-            {
-                widget->header.position.x = widget_next->header.position.x + widget_next->header.size.x + container->layout.padding;
-                widget->header.position.y = widget_next->header.position.y;
-            }
-            else
-            {
-                widget->header.position.x = container->layout.padding;
-                widget->header.position.x -= container->horizontal_value * view_port_dimension.x;
-                widget->header.position.y = container->layout.padding;
-                widget->header.position.y -= container->vertical_value * view_port_dimension.y;
-            }
-        }
-        widget = widget_prev;
+        widget = widget_next;
     }
 }
 
@@ -421,24 +429,25 @@ static void tgui_container_recalculate_widget_position(TGuiWidgetContainer *cont
 
 void tgui_container_add_widget(TGuiHandle container_handle, TGuiHandle widget_handle)
 {
+    // NOTE: the renderer is right left so widget need to be added in the last sibling node
     TGuiWidget *container_widget = tgui_widget_get(container_handle);
     ASSERT(container_widget->header.type == TGUI_CONTAINER);
 
     TGuiWidgetContainer *container = (TGuiWidgetContainer *)container_widget;
     TGuiWidget *widget = tgui_widget_get(widget_handle);
     
+    widget->header.parent = container_handle; 
     if(!container->header.child_last)
     {
         container->header.child_last = widget_handle;
     }
-    widget->header.parent = container_handle; 
-    if(container->header.child_first)
+    else
     {
-        TGuiWidget *old_first_child = tgui_widget_get(container->header.child_first);
-        old_first_child->header.sibling_prev = widget_handle; 
+        TGuiWidget *old_last_child = tgui_widget_get(container->header.child_last);
+        old_last_child->header.sibling_next = widget_handle; 
     }
-    widget->header.sibling_next = container->header.child_first; 
-    container->header.child_first = widget_handle;
+    widget->header.sibling_prev = container->header.child_last; 
+    container->header.child_last = widget_handle;
     
     // NOTE: recalculate the dimensions
     tgui_container_recalculate_dimension(container);
@@ -1046,7 +1055,7 @@ b32 tgui_widget_render(TGuiHandle handle)
     return false;
 }
 
-void tgui_widget_recursive_descent_pre_first_to_last(TGuiHandle handle, TGuiWidgetFP function)
+b32 tgui_widget_recursive_descent_pre_first_to_last(TGuiHandle handle, TGuiWidgetFP function)
 {
     TGuiWidget *widget = tgui_widget_get(handle);
     while(widget)
@@ -1054,14 +1063,18 @@ void tgui_widget_recursive_descent_pre_first_to_last(TGuiHandle handle, TGuiWidg
         if(function(widget->header.handle))
         {
             // NOTE: if the return true we dont need to keep calling it
-            return;
+            return true;
         }
         if(widget->header.child_first)
         {
-            tgui_widget_recursive_descent_pre_first_to_last(widget->header.child_first, function);
+            if(tgui_widget_recursive_descent_pos_first_to_last(widget->header.child_first, function))
+            {
+                return true;
+            }
         }
         widget = tgui_widget_get(widget->header.sibling_next);
     }
+    return false;
 }
 
 b32 tgui_widget_recursive_descent_pos_first_to_last(TGuiHandle handle, TGuiWidgetFP function)
@@ -1079,25 +1092,55 @@ b32 tgui_widget_recursive_descent_pos_first_to_last(TGuiHandle handle, TGuiWidge
         if(function(widget->header.handle))
         {
             // NOTE: if the return true we dont need to keep calling it
-            return true;;
+            return true;
         }
         widget = tgui_widget_get(widget->header.sibling_next);
     }
     return false;
 }
 
-void tgui_widget_recursive_descent_last_to_first(TGuiHandle handle, TGuiWidgetFP function)
+b32 tgui_widget_recursive_descent_pre_last_to_first(TGuiHandle handle, TGuiWidgetFP function)
 {
     TGuiWidget *widget = tgui_widget_get(handle);
     while(widget)
     {
-        function(widget->header.handle);
+        if(function(widget->header.handle))
+        {
+            // NOTE: if the return true we dont need to keep calling it
+            return true;
+        }
         if(widget->header.child_last)
         {
-            tgui_widget_recursive_descent_last_to_first(widget->header.child_last, function);
+            if(tgui_widget_recursive_descent_pre_last_to_first(widget->header.child_last, function))
+            {
+                return true;
+            }
         }
         widget = tgui_widget_get(widget->header.sibling_prev);
     }
+    return false;
+}
+
+b32 tgui_widget_recursive_descent_pos_last_to_first(TGuiHandle handle, TGuiWidgetFP function)
+{
+    TGuiWidget *widget = tgui_widget_get(handle);
+    while(widget)
+    {
+        if(widget->header.child_last)
+        {
+            if(tgui_widget_recursive_descent_pre_last_to_first(widget->header.child_last, function))
+            {
+                return true;
+            }
+        }
+        if(function(widget->header.handle))
+        {
+            // NOTE: if the return true we dont need to keep calling it
+            return true;
+        }
+        widget = tgui_widget_get(widget->header.sibling_prev);
+    }
+    return false;
 }
 
 //-----------------------------------------------------
@@ -1287,7 +1330,7 @@ void tgui_update(void)
     
     // NOTE: update all widget in the state widget tree
     tgui_widget_recursive_descent_pos_first_to_last(state->first_root, tgui_widget_update);
-    tgui_widget_recursive_descent_pre_first_to_last(state->first_root, tgui_widget_render);
+    tgui_widget_recursive_descent_pre_last_to_first(state->last_root, tgui_widget_render);
 }
 
 void tgui_draw_command_buffer(void)
