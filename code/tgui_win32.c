@@ -190,7 +190,7 @@ int main(int argc, char** argv)
         tgui_container_add_widget(frame2, buttons[i]);
     }
 
-    TGuiHandle frame4 = tgui_create_container(400, 400, 0, 0, TGUI_CONTAINER_DYNAMIC|TGUI_CONTAINER_DRAGGABLE, TGUI_LAYOUT_VERTICAL, true, 20);
+    TGuiHandle frame4 = tgui_create_container(400, 20, 0, 0, TGUI_CONTAINER_DYNAMIC|TGUI_CONTAINER_DRAGGABLE, TGUI_LAYOUT_VERTICAL, true, 20);
     tgui_widget_to_root(frame4);
     #define BUTTONS_COUNT2 8
     TGuiHandle buttons2[BUTTONS_COUNT2];

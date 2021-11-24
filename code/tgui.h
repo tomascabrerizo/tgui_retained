@@ -239,6 +239,7 @@ typedef struct TGuiWidgetContainer
     b32 grabbing_y;
     b32 dragging;
     b32 visible;
+    b32 hot;
 } TGuiWidgetContainer;
 
 typedef struct TGuiWidgetButton

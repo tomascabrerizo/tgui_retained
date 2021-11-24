@@ -15,7 +15,7 @@ TGuiClippingStack global_clipping_stack;
 //-----------------------------------------------------
 //  NOTE: inline math functions
 //-----------------------------------------------------
-static inline TGuiV2 tgui_v2(f32 x, f32 y)
+inline static TGuiV2 tgui_v2(f32 x, f32 y)
 {
     TGuiV2 result;
     result.x = x;
@@ -23,37 +23,37 @@ static inline TGuiV2 tgui_v2(f32 x, f32 y)
     return result;
 }
 
-static inline TGuiV2 tgui_v2_add(TGuiV2 a, TGuiV2 b)
+inline static TGuiV2 tgui_v2_add(TGuiV2 a, TGuiV2 b)
 {
     TGuiV2 result = tgui_v2(a.x + b.x, a.y + b.y);
     return result;
 }
 
-static inline TGuiV2 tgui_v2_sub(TGuiV2 a, TGuiV2 b)
+inline static TGuiV2 tgui_v2_sub(TGuiV2 a, TGuiV2 b)
 {
     TGuiV2 result = tgui_v2(a.x - b.x, a.y - b.y);
     return result;
 }
 
-static inline TGuiV2 tgui_v2_scale(TGuiV2 a, f32 b)
+inline static TGuiV2 tgui_v2_scale(TGuiV2 a, f32 b)
 {
     TGuiV2 result = tgui_v2(a.x * b, a.y * b);
     return result;
 }
 
-static inline f32 tgui_v2_dot(TGuiV2 a, TGuiV2 b)
+inline static f32 tgui_v2_dot(TGuiV2 a, TGuiV2 b)
 {
     f32 result = a.x * b.x + a.y * b.y;
     return result;
 }
 
-static inline f32 tgui_v2_lenght_sqrt(TGuiV2 v)
+inline static f32 tgui_v2_lenght_sqrt(TGuiV2 v)
 {
     f32 result = tgui_v2_dot(v, v);
     return result;
 }
 
-static inline TGuiRect tgui_rect_xywh(f32 x, f32 y, f32 width, f32 height)
+inline static TGuiRect tgui_rect_xywh(f32 x, f32 y, f32 width, f32 height)
 {
     TGuiRect result;
     result.x = x;
@@ -63,13 +63,13 @@ static inline TGuiRect tgui_rect_xywh(f32 x, f32 y, f32 width, f32 height)
     return result;
 }
 
-static inline f32 tgui_v2_length(TGuiV2 v)
+inline static f32 tgui_v2_length(TGuiV2 v)
 {
     f32 result = sqrtf(tgui_v2_lenght_sqrt(v));
     return result;
 }
 
-static inline TGuiV2 tgui_v2_normalize(TGuiV2 v)
+inline static TGuiV2 tgui_v2_normalize(TGuiV2 v)
 {
     TGuiV2 result = {0};
     result.x = v.x / tgui_v2_length(v);
@@ -138,7 +138,7 @@ static TGuiClipResult tgui_clip_rect(i32 min_x, i32 min_y, i32 max_x, i32 max_y,
 // NOTE: GUI lib functions
 //-----------------------------------------------------
 
-static inline TGuiWidget *tgui_create_widget(TGuiHandle *handle)
+inline static TGuiWidget *tgui_create_widget(TGuiHandle *handle)
 {
     TGuiState *state = &tgui_global_state;
     *handle = tgui_widget_allocator_pool(&state->widget_allocator);
@@ -198,7 +198,7 @@ TGuiHandle tgui_create_container(i32 x, i32 y, i32 width, i32 height, TGuiContan
     return handle;
 }
 
-static inline void tgui_widget_set_text(TGuiText *text, char *label)
+inline static void tgui_widget_set_text(TGuiText *text, char *label)
 {
     TGuiState *state = &tgui_global_state;
     text->text = label;
@@ -493,9 +493,14 @@ static TGuiWidgetContainer *tgui_widget_get_container(TGuiWidget *widget)
     return &widget->container;
 }
 
-// TODO: this function must move the container to the las position nost first
-static void tgui_container_set_to_top(TGuiWidgetContainer *container)
+static void tgui_container_set_to_top(TGuiWidget *container)
 {
+    while(container->header.parent)
+    {
+        container = tgui_widget_get(container->header.parent);
+        ASSERT(container->header.type == TGUI_CONTAINER);
+    }
+
     TGuiState *state = &tgui_global_state;
     TGuiWidget *first = tgui_widget_get(state->first_root);
     TGuiWidget *prev = tgui_widget_get(container->header.sibling_prev);
@@ -568,18 +573,46 @@ static b32 tgui_mouse_is_in_parent(TGuiHandle handle)
     return tgui_point_inside_rect(mouse, parent_rect);
 }
 
-static b32 tgui_container_update_scroll(TGuiState *state, TGuiWidgetContainer *container)
+static b32 tgui_container_update(TGuiState *state, TGuiWidgetContainer *container)
 {
-    b32 result = false;
+    TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y); 
+    TGuiV2 widget_abs_pos = tgui_widget_abs_pos(container->header.handle);
+
+    TGuiRect container_box = {0};
+    container_box.pos = widget_abs_pos;
+    container_box.dim = container->header.size;
+    if(tgui_point_inside_rect(mouse, container_box))
+    {
+        container->hot = true;
+    }
+    else
+    {
+        container->hot = false;
+    }
+
+    if(container->hot && state->mouse_down)
+    {
+        state->widget_active = container->header.handle;
+    }
     
+    if(state->mouse_up)
+    {
+        state->widget_active = TGUI_INVALID_HANDLE;
+    }
+    
+    if(container->hot) return true;
+    
+    return false;
+}
+
+static void tgui_container_update_scroll(TGuiState *state, TGuiWidgetContainer *container)
+{
     // TODO: use tgui_widget_get_collision_box here
     TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y); 
     TGuiV2 widget_abs_pos = tgui_widget_abs_pos(container->header.handle);
     
     if(container->flags & TGUI_CONTAINER_V_SCROLL)
     {
-        result = true;
-
         TGuiRect backgrip = {0};
         backgrip.pos = tgui_v2_add(widget_abs_pos, container->vertical_grip.pos);
         backgrip.dim = container->vertical_grip.dim;
@@ -621,8 +654,6 @@ static b32 tgui_container_update_scroll(TGuiState *state, TGuiWidgetContainer *c
     
     if(container->flags & TGUI_CONTAINER_H_SCROLL)
     {
-        result = true;
-
         TGuiRect backgrip = {0};
         backgrip.pos = tgui_v2_add(widget_abs_pos, container->horizontal_grip.pos);
         backgrip.dim = container->horizontal_grip.dim;
@@ -665,12 +696,10 @@ static b32 tgui_container_update_scroll(TGuiState *state, TGuiWidgetContainer *c
     }
     // TODO: only recalculate child positions
     tgui_container_recalculate_widget_position(container);
-    return result;
 }
 
-static b32 tgui_container_update_dragg_position(TGuiState *state, TGuiWidgetContainer *container)
+static void tgui_container_update_dragg_position(TGuiState *state, TGuiWidgetContainer *container)
 {
-    b32 result = false;
     // TODO: use tgui_widget_get_collision_box here
     TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y); 
     TGuiV2 last_mouse = tgui_v2(state->last_mouse_x, state->last_mouse_y); 
@@ -698,9 +727,7 @@ static b32 tgui_container_update_dragg_position(TGuiState *state, TGuiWidgetCont
             TGuiV2 mouse_offset = tgui_v2_sub(mouse_rel, last_mouse_rel);
             container->header.position = tgui_v2_add(container->header.position, mouse_offset);
         }
-        result = true;
     }
-    return result;
 }
 
 static b32 tgui_button_update(TGuiState *state, TGuiWidgetButton *button)
@@ -741,7 +768,7 @@ static b32 tgui_button_update(TGuiState *state, TGuiWidgetButton *button)
         button->pressed = false;
     }
 
-    if(button->active)
+    if(button->active || button->hot)
     {
         return true;
     }
@@ -782,7 +809,7 @@ static b32 tgui_checkbox_update(TGuiState *state, TGuiWidgetCheckBox *checkbox)
         return true;
     }
 
-    if(checkbox->active)
+    if(checkbox->active || checkbox->hot)
     {
         return true;
     }
@@ -841,6 +868,11 @@ b32 tgui_widget_update(TGuiHandle handle)
     {
         return false;
     }
+    
+    if(state->widget_active == handle)
+    {
+        tgui_container_set_to_top(widget);
+    }
 
     switch(widget->header.type)
     {
@@ -848,8 +880,9 @@ b32 tgui_widget_update(TGuiHandle handle)
         {
             b32 result = false;
             // TODO: IMPORTANT: with orverlapping scrollbars get pick the one inside container need to consiget the scrollbar in the dimensionbox
-            result = tgui_container_update_scroll(state, &widget->container);
-            result = tgui_container_update_dragg_position(state, &widget->container) && result;
+            result = tgui_container_update(state, &widget->container);
+            tgui_container_update_scroll(state, &widget->container);
+            tgui_container_update_dragg_position(state, &widget->container);
             return result;
         }break;
         case TGUI_END_CONTAINER:
