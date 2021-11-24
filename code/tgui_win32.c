@@ -157,7 +157,6 @@ int main(int argc, char** argv)
     tgui_widget_to_root(frame3);
     tgui_container_add_widget(frame3, frame1);
     tgui_container_add_widget(frame3, frame2);
-    //tgui_widget_to_root(frame2);
 
     TGuiHandle button_box = tgui_create_container(0, 0, 0, 0, TGUI_CONTAINER_DYNAMIC, TGUI_LAYOUT_HORIZONTAL, false, 15);
     tgui_container_add_widget(frame1, button_box);
@@ -189,6 +188,16 @@ int main(int argc, char** argv)
     {
         buttons[i] = tgui_create_button("button");
         tgui_container_add_widget(frame2, buttons[i]);
+    }
+
+    TGuiHandle frame4 = tgui_create_container(400, 400, 0, 0, TGUI_CONTAINER_DYNAMIC|TGUI_CONTAINER_DRAGGABLE, TGUI_LAYOUT_VERTICAL, true, 20);
+    tgui_widget_to_root(frame4);
+    #define BUTTONS_COUNT2 8
+    TGuiHandle buttons2[BUTTONS_COUNT2];
+    for(i32 i = 0; i < BUTTONS_COUNT2; ++i)
+    {
+        buttons2[i] = tgui_create_button("button 2");
+        tgui_container_add_widget(frame4, buttons2[i]);
     }
     
     printf("[INFO]: widget size %llu (bytes)\n", sizeof(TGuiWidget));

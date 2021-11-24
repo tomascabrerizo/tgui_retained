@@ -84,6 +84,56 @@ static b32 tgui_point_inside_rect(TGuiV2 point, TGuiRect rect)
     return result;
 }
 
+typedef struct TGuiClipResult
+{
+    i32 min_x; 
+    i32 min_y; 
+    i32 max_x; 
+    i32 max_y; 
+    i32 offset_x;
+    i32 offset_y;
+} TGuiClipResult;
+
+static TGuiClipResult tgui_clip_rect(i32 min_x, i32 min_y, i32 max_x, i32 max_y, TGuiRect clipping)
+{
+    i32 clip_min_x = (i32)clipping.x;
+    i32 clip_min_y = (i32)clipping.y;
+    i32 clip_max_x = clip_min_x + (i32)clipping.width;
+    i32 clip_max_y = clip_min_y + (i32)clipping.height;
+     
+    i32 offset_x = 0;
+    i32 offset_y = 0;
+    if(min_x < clip_min_x)
+    {
+        offset_x = -(min_x - clip_min_x);
+        min_x = clip_min_x;
+    }
+    if(max_x > clip_max_x)
+    {
+        max_x = clip_max_x;
+    }
+    if(min_y < clip_min_y)
+    {
+        offset_y = -(min_y - clip_min_y);
+        min_y = clip_min_y;
+    }
+    if(max_y > clip_max_y)
+    {
+        max_y = clip_max_y;
+    }
+
+    TGuiClipResult result = {0};
+    result.min_x = min_x;
+    result.min_y = min_y;
+    result.max_x = max_x;
+    result.max_y = max_y;
+    
+    result.offset_x = offset_x;
+    result.offset_y = offset_y;
+    
+    return result;
+}
+
 //-----------------------------------------------------
 // NOTE: GUI lib functions
 //-----------------------------------------------------
@@ -461,6 +511,54 @@ static void tgui_container_set_to_top(TGuiWidgetContainer *container)
     }
 }
 
+static b32 tgui_widget_is_active(TGuiHandle handle)
+{
+    TGuiState *state = &tgui_global_state;
+    if(!state->widget_active) return true;
+    if(state->widget_active != handle) return false;
+    return true;
+}
+
+static b32 tgui_mouse_is_in_parent(TGuiHandle handle)
+{
+    TGuiState *state = &tgui_global_state;
+    TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y); 
+    TGuiWidget *widget = tgui_widget_get(handle);
+    if(!widget->header.parent) return true;
+    
+    TGuiWidget *parent = tgui_widget_get(widget->header.parent);
+    ASSERT(parent->header.type == TGUI_CONTAINER);
+    TGuiRect parent_rect = {0};
+    parent_rect.pos = tgui_widget_abs_pos(parent->header.handle);
+    parent_rect.dim = parent->container.dimension;
+    
+    TGuiClipResult clip_result = {0};
+    clip_result.min_x = parent_rect.x;
+    clip_result.min_y = parent_rect.y;
+    clip_result.max_x = clip_result.min_x + parent_rect.width;
+    clip_result.max_y = clip_result.min_y + parent_rect.height;
+    
+    // TODO: clipping dimension one time with it self (need fix)
+    // NOTE: clip parrent dimension
+    while(parent)
+    {
+        ASSERT(parent->header.type == TGUI_CONTAINER);
+        TGuiRect parent_clipping= {0};
+        parent_clipping.pos = tgui_widget_abs_pos(parent->header.handle);
+        parent_clipping.dim = parent->container.dimension;
+        clip_result = tgui_clip_rect(clip_result.min_x, clip_result.min_y, clip_result.max_x, clip_result.max_y, parent_clipping); 
+        parent = tgui_widget_get(parent->header.parent);
+    }
+
+    parent_rect.x = clip_result.min_x;
+    parent_rect.y = clip_result.min_y;
+    parent_rect.width =  (clip_result.max_x - clip_result.min_x);
+    parent_rect.height = (clip_result.max_y - clip_result.min_y);
+
+
+    return tgui_point_inside_rect(mouse, parent_rect);
+}
+
 static b32 tgui_container_update_scroll(TGuiState *state, TGuiWidgetContainer *container)
 {
     b32 result = false;
@@ -601,7 +699,7 @@ static b32 tgui_button_update(TGuiState *state, TGuiWidgetButton *button)
     TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y); 
     
     TGuiRect button_box = tgui_widget_get_collision_box((TGuiWidget *)button);  
-    if(tgui_point_inside_rect(mouse, button_box))
+    if(tgui_point_inside_rect(mouse, button_box) && tgui_mouse_is_in_parent(button->header.handle))
     {
         button->hot = true;
     }
@@ -646,7 +744,7 @@ static b32 tgui_checkbox_update(TGuiState *state, TGuiWidgetCheckBox *checkbox)
     TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y); 
     
     TGuiRect checkbox_box = tgui_widget_get_collision_box((TGuiWidget *)checkbox);  
-    if(tgui_point_inside_rect(mouse, checkbox_box))
+    if(tgui_point_inside_rect(mouse, checkbox_box) && tgui_mouse_is_in_parent(checkbox->header.handle))
     {
         checkbox->hot = true;
     }
@@ -687,7 +785,7 @@ static b32 tgui_slider_update(TGuiState *state, TGuiWidgetSlider *slider)
     TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y); 
     TGuiRect slider_box = tgui_widget_get_collision_box((TGuiWidget *)slider);  
     
-    if(tgui_point_inside_rect(mouse, slider_box))
+    if(tgui_point_inside_rect(mouse, slider_box) && tgui_mouse_is_in_parent(slider->header.handle))
     {
         slider->hot = true;
     }
@@ -725,19 +823,11 @@ static b32 tgui_slider_update(TGuiState *state, TGuiWidgetSlider *slider)
     return false;
 }
 
-static b32 tgui_widget_is_active(TGuiHandle handle)
-{
-    TGuiState *state = &tgui_global_state;
-    if(!state->widget_active) return true;
-    if(state->widget_active != handle) return false;
-    return true;
-}
-
 b32 tgui_widget_update(TGuiHandle handle)
 {
     TGuiState *state = &tgui_global_state;
     TGuiWidget *widget = tgui_widget_get(handle);
-    
+
     if(!tgui_widget_is_active(handle))
     {
         return false;
@@ -748,6 +838,7 @@ b32 tgui_widget_update(TGuiHandle handle)
         case TGUI_CONTAINER:
         {
             b32 result = false;
+            // TODO: IMPORTANT: with orverlapping scrollbars get pick the one inside container need to consiget the scrollbar in the dimensionbox
             result = tgui_container_update_scroll(state, &widget->container);
             result = tgui_container_update_dragg_position(state, &widget->container) && result;
             return result;
@@ -782,6 +873,8 @@ b32 tgui_widget_update(TGuiHandle handle)
 
 b32 tgui_widget_render(TGuiHandle handle)
 {
+    // TODO: refactor tgui_widget_render
+
     TGuiWidget *widget = tgui_widget_get(handle);
     TGuiV2 widget_abs_pos = tgui_widget_abs_pos(handle);
     
@@ -1356,56 +1449,6 @@ void tgui_clear_backbuffer(TGuiBitmap *backbuffer)
 //-----------------------------------------------------
 // NOTE: simple rendering API
 //-----------------------------------------------------
-
-typedef struct TGuiClipResult
-{
-    i32 min_x; 
-    i32 min_y; 
-    i32 max_x; 
-    i32 max_y; 
-    i32 offset_x;
-    i32 offset_y;
-} TGuiClipResult;
-
-static TGuiClipResult tgui_clip_rect(i32 min_x, i32 min_y, i32 max_x, i32 max_y, TGuiRect clipping)
-{
-    i32 clip_min_x = (i32)clipping.x;
-    i32 clip_min_y = (i32)clipping.y;
-    i32 clip_max_x = clip_min_x + (i32)clipping.width;
-    i32 clip_max_y = clip_min_y + (i32)clipping.height;
-     
-    i32 offset_x = 0;
-    i32 offset_y = 0;
-    if(min_x < clip_min_x)
-    {
-        offset_x = -(min_x - clip_min_x);
-        min_x = clip_min_x;
-    }
-    if(max_x > clip_max_x)
-    {
-        max_x = clip_max_x;
-    }
-    if(min_y < clip_min_y)
-    {
-        offset_y = -(min_y - clip_min_y);
-        min_y = clip_min_y;
-    }
-    if(max_y > clip_max_y)
-    {
-        max_y = clip_max_y;
-    }
-
-    TGuiClipResult result = {0};
-    result.min_x = min_x;
-    result.min_y = min_y;
-    result.max_x = max_x;
-    result.max_y = max_y;
-    
-    result.offset_x = offset_x;
-    result.offset_y = offset_y;
-    
-    return result;
-}
 
 
 //-----------------------------------------------------
