@@ -133,7 +133,7 @@ int main(int argc, char** argv)
     global_running = true;
     win32_create_backbuffer(global_device_context);
    
-    u32 frames_per_second = 30;
+    u32 frames_per_second = 60;
     u32 ms_per_frame = 1000 / frames_per_second;
     f32 delta_time = 1.0f / (f32)frames_per_second;
     LARGE_INTEGER large_frequency;
@@ -198,8 +198,7 @@ int main(int argc, char** argv)
         tgui_container_add_widget(frame2, buttons[i]);
     }
 
-    TGuiHandle frame4 = tgui_create_container(400, 20, 0, 0, TGUI_CONTAINER_DYNAMIC|TGUI_CONTAINER_DRAGGABLE, TGUI_LAYOUT_VERTICAL, true, 20);
-    tgui_widget_to_root(frame4);
+    TGuiHandle frame4 = tgui_create_container(0, 0, 0, 0, TGUI_CONTAINER_DYNAMIC|TGUI_CONTAINER_DRAGGABLE, TGUI_LAYOUT_VERTICAL, true, 10);
     #define BUTTONS_COUNT2 8
     TGuiHandle buttons2[BUTTONS_COUNT2];
     for(i32 i = 0; i < BUTTONS_COUNT2; ++i)
@@ -208,9 +207,14 @@ int main(int argc, char** argv)
         tgui_container_add_widget(frame4, buttons2[i]);
     }
     
+    TGuiHandle frame5 = tgui_create_container(400, 20, 0, 0, TGUI_CONTAINER_DYNAMIC|TGUI_CONTAINER_DRAGGABLE, TGUI_LAYOUT_HORIZONTAL, true, 10);
+    tgui_widget_to_root(frame5);
+    
     TGuiHandle textbox = tgui_create_textbox(200, 200);
     tgui_set_widget_position(textbox, 50, 50);
-    tgui_widget_to_root(textbox);
+    
+    tgui_container_add_widget(frame5, textbox);
+    tgui_container_add_widget(frame5, frame4);
 
     printf("[INFO]: widget size %llu (bytes)\n", sizeof(TGuiWidget));
     printf("[INFO]: total allocated used %llu (bytes)\n", tgui_global_state.widget_allocator.count*sizeof(TGuiWidget));

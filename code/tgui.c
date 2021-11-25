@@ -247,8 +247,10 @@ TGuiHandle tgui_create_textbox(u32 width, u32 height)
     TGuiWidget *widget = tgui_create_widget(&handle); 
     widget->header.type = TGUI_TEXTBOX;
     widget->header.size = tgui_v2(width, height);
-
-    widget->textbox.cursor_position = tgui_v2(0, 0);
+    
+    widget->textbox.margin = 10;
+    widget->textbox.dimension = tgui_v2_sub(tgui_v2(width, height), tgui_v2(widget->textbox.margin*2, widget->textbox.margin*2));
+    widget->textbox.cursor_position = 0;
     widget->textbox.max_characters = 128;
     widget->textbox.text_buffer = (u8 *)malloc(widget->textbox.max_characters*sizeof(u8));
     memset(widget->textbox.text_buffer, 0, widget->textbox.max_characters*sizeof(u8));
@@ -876,9 +878,9 @@ static b32 tgui_slider_update(TGuiState *state, TGuiWidgetSlider *slider)
 
 static void tgui_textbox_push_char(TGuiWidgetTextBox *textbox, u8 character)
 {
-    if(textbox->cursor_position.x < textbox->max_characters)
+    if(textbox->cursor_position < textbox->max_characters)
     {
-        textbox->text_buffer[(u32)textbox->cursor_position.x++] = character;
+        textbox->text_buffer[textbox->cursor_position++] = character;
     }
 }
 
@@ -1149,6 +1151,13 @@ b32 tgui_widget_render(TGuiHandle handle)
             draw_cmd.descriptor.dim = widget->header.size;
             draw_cmd.color = TGUI_DRAK_BLACK;
             tgui_push_draw_command(draw_cmd);
+            
+
+            TGuiDrawCommand start_clip_cmd = {0};
+            start_clip_cmd.type = TGUI_DRAWCMD_START_CLIPPING;
+            start_clip_cmd.descriptor.pos = tgui_v2_add(widget_abs_pos, tgui_v2(widget->textbox.margin, widget->textbox.margin));
+            start_clip_cmd.descriptor.dim = widget->textbox.dimension;
+            tgui_push_draw_command(start_clip_cmd);
 
             u32 line = 0;
             u8 *text = widget->textbox.text_buffer;
@@ -1165,8 +1174,8 @@ b32 tgui_widget_render(TGuiHandle handle)
                 TGuiState *state = &tgui_global_state;
                 TGuiDrawCommand text_cmd = {0};
                 text_cmd.type = TGUI_DRAWCMD_TEXT;
-                text_cmd.descriptor.x = widget_abs_pos.x;
-                text_cmd.descriptor.y = widget_abs_pos.y + (line * state->font_height);
+                text_cmd.descriptor.x = widget_abs_pos.x + widget->textbox.margin;
+                text_cmd.descriptor.y = widget_abs_pos.y + widget->textbox.margin + (line * state->font_height);
                 text_cmd.text = (char *)text;
                 text_cmd.text_size = line_size;
                 tgui_push_draw_command(text_cmd);
@@ -1174,11 +1183,16 @@ b32 tgui_widget_render(TGuiHandle handle)
                 character++;
                 line++;
                 text = character;
+                // TODO: IMPORTANT: this should be check in the beginning of the while loop
                 if(*(character - 1) == '\0')
                 {
                     text = 0;
                 }
             }
+
+            TGuiDrawCommand end_clip_cmd = {0};
+            end_clip_cmd.type = TGUI_DRAWCMD_END_CLIPPING;
+            tgui_push_draw_command(end_clip_cmd);
 
         }break;
         case TGUI_COUNT:
