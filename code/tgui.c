@@ -241,6 +241,21 @@ TGuiHandle tgui_create_slider(void)
     return handle;
 }
 
+TGuiHandle tgui_create_textbox(u32 width, u32 height)
+{
+    TGuiHandle handle = TGUI_INVALID_HANDLE;
+    TGuiWidget *widget = tgui_create_widget(&handle); 
+    widget->header.type = TGUI_TEXTBOX;
+    widget->header.size = tgui_v2(width, height);
+
+    widget->textbox.cursor_position = tgui_v2(0, 0);
+    widget->textbox.max_characters = 128;
+    widget->textbox.text_buffer = (u8 *)malloc(widget->textbox.max_characters*sizeof(u8));
+    memset(widget->textbox.text_buffer, 0, widget->textbox.max_characters*sizeof(u8));
+    
+    return handle;
+}
+
 void tgui_widget_to_root(TGuiHandle widget_handle)
 {
     TGuiState *state = &tgui_global_state;
@@ -859,6 +874,46 @@ static b32 tgui_slider_update(TGuiState *state, TGuiWidgetSlider *slider)
     return false;
 }
 
+static void tgui_textbox_push_char(TGuiWidgetTextBox *textbox, u8 character)
+{
+    if(textbox->cursor_position.x < textbox->max_characters)
+    {
+        textbox->text_buffer[(u32)textbox->cursor_position.x++] = character;
+    }
+}
+
+static b32 tgui_textbox_update(TGuiState *state, TGuiWidgetTextBox *textbox)
+{
+    TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y); 
+    TGuiV2 widget_abs_pos = tgui_widget_abs_pos(textbox->header.handle);
+
+    TGuiRect text_box = {0};
+    text_box.pos = widget_abs_pos;
+    text_box.dim = textbox->header.size;
+    if(tgui_point_inside_rect(mouse, text_box))
+    {
+        textbox->hot = true;
+    }
+    else
+    {
+        textbox->hot = false;
+    }
+
+    if(textbox->hot && state->mouse_down)
+    {
+        state->widget_active = textbox->header.handle;
+    }
+    
+    if(state->mouse_up && !tgui_point_inside_rect(mouse, text_box))
+    {
+        state->widget_active = TGUI_INVALID_HANDLE;
+    }
+    
+    if(textbox->hot) return true;
+    
+    return false;
+}
+
 b32 tgui_widget_update(TGuiHandle handle)
 {
     TGuiState *state = &tgui_global_state;
@@ -873,14 +928,13 @@ b32 tgui_widget_update(TGuiHandle handle)
     {
         tgui_container_set_to_top(widget);
     }
-
+    
     switch(widget->header.type)
     {
         case TGUI_CONTAINER:
         {
-            b32 result = false;
             // TODO: IMPORTANT: with orverlapping scrollbars get pick the one inside container need to consiget the scrollbar in the dimensionbox
-            result = tgui_container_update(state, &widget->container);
+            b32 result = tgui_container_update(state, &widget->container);
             tgui_container_update_scroll(state, &widget->container);
             tgui_container_update_dragg_position(state, &widget->container);
             return result;
@@ -902,6 +956,11 @@ b32 tgui_widget_update(TGuiHandle handle)
         case TGUI_SLIDER:
         {
             b32 result = tgui_slider_update(state, &widget->slider);
+            return result;
+        }break;
+        case TGUI_TEXTBOX:
+        {
+            b32 result = tgui_textbox_update(state, &widget->textbox);
             return result;
         }break;
         case TGUI_COUNT:
@@ -1027,6 +1086,7 @@ b32 tgui_widget_render(TGuiHandle handle)
             text_cmd.type = TGUI_DRAWCMD_TEXT;
             text_cmd.descriptor = text_rect;
             text_cmd.text = button_data->text.text;
+            text_cmd.text_size = strlen(button_data->text.text);
             tgui_push_draw_command(text_cmd);
         
         } break;
@@ -1057,6 +1117,7 @@ b32 tgui_widget_render(TGuiHandle handle)
             text_cmd.type = TGUI_DRAWCMD_TEXT;
             text_cmd.descriptor = text_rect;
             text_cmd.text = checkbox_data->text.text;
+            text_cmd.text_size = strlen(checkbox_data->text.text);
             tgui_push_draw_command(text_cmd);
         } break;
         case TGUI_SLIDER:
@@ -1080,6 +1141,46 @@ b32 tgui_widget_render(TGuiHandle handle)
             draw_cmd.color = TGUI_GREY;
             tgui_push_draw_command(draw_cmd);
         } break;
+        case TGUI_TEXTBOX:
+        {
+            TGuiDrawCommand draw_cmd = {0};
+            draw_cmd.type = TGUI_DRAWCMD_RECT;
+            draw_cmd.descriptor.pos = widget_abs_pos;
+            draw_cmd.descriptor.dim = widget->header.size;
+            draw_cmd.color = TGUI_DRAK_BLACK;
+            tgui_push_draw_command(draw_cmd);
+
+            u32 line = 0;
+            u8 *text = widget->textbox.text_buffer;
+            u8 *character = widget->textbox.text_buffer;
+            while(text)
+            {
+                u32 line_size = 0;
+                while((*character != '\n') && (*character != '\0'))
+                {
+                    line_size++;
+                    character++;
+                }
+                
+                TGuiState *state = &tgui_global_state;
+                TGuiDrawCommand text_cmd = {0};
+                text_cmd.type = TGUI_DRAWCMD_TEXT;
+                text_cmd.descriptor.x = widget_abs_pos.x;
+                text_cmd.descriptor.y = widget_abs_pos.y + (line * state->font_height);
+                text_cmd.text = (char *)text;
+                text_cmd.text_size = line_size;
+                tgui_push_draw_command(text_cmd);
+                
+                character++;
+                line++;
+                text = character;
+                if(*(character - 1) == '\0')
+                {
+                    text = 0;
+                }
+            }
+
+        }break;
         case TGUI_COUNT:
         {
             ASSERT(!"invalid code path");
@@ -1224,6 +1325,13 @@ TGuiHandle tgui_widget_allocator_pool(TGuiWidgetPoolAllocator *allocator)
 void tgui_widget_allocator_free(TGuiWidgetPoolAllocator *allocator, TGuiHandle *handle)
 {
     ASSERT(*handle != TGUI_INVALID_HANDLE);
+    TGuiWidget *widget = tgui_widget_get(*handle);
+    if(widget->header.type == TGUI_TEXTBOX)
+    {
+        free(widget->textbox.text_buffer);
+        widget->textbox.text_buffer = 0;
+    }
+
     TGuiWidgetFree *free_widget = (TGuiWidgetFree *)(allocator->buffer + *handle);
     free_widget->handle = *handle;
     free_widget->next = allocator->free_list;
@@ -1345,13 +1453,18 @@ void tgui_update(void)
                 state->mouse_up = true;
                 state->mouse_is_down = false;
             } break;
-            case TGUI_EVEN_BUTTON:
+            case TGUI_EVENT_CHAR:
             {
-                TGuiEventButton *button = (TGuiEventButton *)event;
-                printf("button: %d clicked!\n", button->handle);
-            } break;
-            case TGUI_EVEN_FOCUS:
-            {
+                if(state->widget_active)
+                {
+                    TGuiWidget *widget = tgui_widget_get(state->widget_active);
+                    if(widget->header.type == TGUI_TEXTBOX)
+                    {
+                        if(event->character.character == 13) event->character.character = '\n';
+                        else if((event->character.character < ' ') || (event->character.character > '~')) break;
+                        tgui_textbox_push_char(&widget->textbox, event->character.character); 
+                    }
+                }
             } break;
             case TGUI_EVENT_COUNT:
             {
@@ -1407,7 +1520,7 @@ void tgui_draw_command_buffer(void)
             } break;
             case TGUI_DRAWCMD_TEXT:
             {
-                tgui_draw_text(state->backbuffer, state->font, state->font_height, draw_cmd.descriptor.x, draw_cmd.descriptor.y, draw_cmd.text);
+                tgui_draw_text(state->backbuffer, state->font, state->font_height, draw_cmd.descriptor.x, draw_cmd.descriptor.y, draw_cmd.text, draw_cmd.text_size);
             } break;
             case TGUI_DRAWCMD_COUNT:
             {
@@ -1870,14 +1983,13 @@ void tgui_draw_char(TGuiBitmap *backbuffer, TGuiFont *font, u32 height, i32 x, i
     tgui_draw_src_dest_bitmap(backbuffer, font->bitmap, src, dest); 
 }
 
-void tgui_draw_text(TGuiBitmap *backbuffer, TGuiFont *font, u32 height, i32 x, i32 y, char *text)
+void tgui_draw_text(TGuiBitmap *backbuffer, TGuiFont *font, u32 height, i32 x, i32 y, char *text, u32 text_size)
 {
     // TODO: the w_ratio is been calculated in two time
     f32 w_ration = (f32)font->src_rect.width / (f32)font->src_rect.height;
     u32 width = (u32)(w_ration * (f32)height + 0.5f);
      
-    u32 length = strlen((const char *)text);
-    for(u32 index = 0; index < length; ++index)
+    for(u32 index = 0; index < text_size; ++index)
     {
         tgui_draw_char(backbuffer, font, height, x, y, text[index]);
         x += width;

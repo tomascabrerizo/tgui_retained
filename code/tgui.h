@@ -81,31 +81,15 @@ typedef struct TGuiFont
 
 typedef enum TGuiEventType
 {
-    // NOTE: GUI events
-    TGUI_EVEN_BUTTON,
-    TGUI_EVEN_FOCUS,
-
-    // NOTE: externals events
     TGUI_EVENT_MOUSEMOVE,
     TGUI_EVENT_MOUSEDOWN,
     TGUI_EVENT_MOUSEUP,
     TGUI_EVENT_KEYDOWN,
     TGUI_EVENT_KEYUP,
+    TGUI_EVENT_CHAR,
 
     TGUI_EVENT_COUNT,
 } TGuiEventType;
-
-typedef struct TGuiEventButton
-{
-    TGuiEventType type;
-    TGuiHandle handle;
-} TGuiEventButton;
-
-typedef struct TGuiEventFocus
-{
-    TGuiEventType type;
-    TGuiHandle handle;
-} TGuiEventFocus;
 
 typedef struct TGuiEventMouseMove
 {
@@ -114,16 +98,18 @@ typedef struct TGuiEventMouseMove
     i32 pos_y;
 } TGuiEventMouseMove;
 
+typedef struct TGuiEventChar
+{
+    TGuiEventType type;
+    u8 character;
+} TGuiEventChar;
+
 typedef union TGuiEvent
 {
     TGuiEventType type;
-    
-    // NOTE: GUI events
-    TGuiEventButton button;
-    TGuiEventFocus focus;
-    
-    // NOTE: externals events
+    // ---------------- 
     TGuiEventMouseMove mouse;
+    TGuiEventChar character;
 } TGuiEvent;
 
 #define TGUI_EVENT_QUEUE_MAX 128
@@ -154,6 +140,7 @@ typedef struct TGuiDrawCommand
     u32 ratio;
     u32 color;
     char *text;
+    u32 text_size;
 } TGuiDrawCommand;
 
 // TODO: make container structs for this queues, like std::vector<> in c++
@@ -172,6 +159,7 @@ typedef enum TGuiWidgetType
     TGUI_BUTTON,
     TGUI_CHECKBOX,
     TGUI_SLIDER,
+    TGUI_TEXTBOX,
     
     TGUI_COUNT,
 } TGuiWidgetType;
@@ -274,6 +262,16 @@ typedef struct TGuiWidgetSlider
     TGuiV2 grip_dimension;
 } TGuiWidgetSlider;
 
+typedef struct TGuiWidgetTextBox
+{
+    TGuiWidgetHeader header;
+    //----------------------
+    b32 hot;
+    TGuiV2 cursor_position;
+    u32 max_characters;
+    u8 *text_buffer;
+} TGuiWidgetTextBox;
+
 typedef union TGuiWidget
 {
     TGuiWidgetHeader header;
@@ -282,6 +280,7 @@ typedef union TGuiWidget
     TGuiWidgetButton button;
     TGuiWidgetCheckBox checkbox;
     TGuiWidgetSlider slider;
+    TGuiWidgetTextBox textbox;
 } TGuiWidget;
 
 typedef struct TGuiWidgetFree
@@ -410,7 +409,7 @@ TGUI_API void tgui_draw_src_dest_bitmap(TGuiBitmap *backbuffer, TGuiBitmap *bitm
 // NOTE: height is in pixels
 TGUI_API TGuiFont tgui_create_font(TGuiBitmap *bitmap, u32 char_width, u32 char_height, u32 num_rows, u32 num_cols);
 TGUI_API void tgui_draw_char(TGuiBitmap *backbuffer, TGuiFont *font, u32 height, i32 x, i32 y, char character);
-TGUI_API void tgui_draw_text(TGuiBitmap *backbuffer, TGuiFont *font, u32 height, i32 x, i32 y, char *text);
+TGUI_API void tgui_draw_text(TGuiBitmap *backbuffer, TGuiFont *font, u32 height, i32 x, i32 y, char *text, u32 text_size);
 TGUI_API u32 tgui_text_get_width(TGuiFont *font, char *text, u32 height);
 
 #endif // TGUI_WIN32_H

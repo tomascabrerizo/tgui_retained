@@ -78,6 +78,14 @@ static LRESULT win32_window_proc(HWND window, UINT message, WPARAM w_param, LPAR
             mouse_event.type = TGUI_EVENT_MOUSEUP;
             tgui_push_event(mouse_event);
         }break;
+        case WM_CHAR:
+        {
+            u8 character = (u8)w_param;
+            TGuiEvent char_event = {0};
+            char_event.type = TGUI_EVENT_CHAR;
+            char_event.character.character = character;
+            tgui_push_event(char_event);
+        }
         default:
         {
             result = DefWindowProcA(window, message, w_param, l_param);
@@ -200,6 +208,10 @@ int main(int argc, char** argv)
         tgui_container_add_widget(frame4, buttons2[i]);
     }
     
+    TGuiHandle textbox = tgui_create_textbox(200, 200);
+    tgui_set_widget_position(textbox, 50, 50);
+    tgui_widget_to_root(textbox);
+
     printf("[INFO]: widget size %llu (bytes)\n", sizeof(TGuiWidget));
     printf("[INFO]: total allocated used %llu (bytes)\n", tgui_global_state.widget_allocator.count*sizeof(TGuiWidget));
     printf("[INFO]: total allocated size %llu (bytes)\n", tgui_global_state.widget_allocator.buffer_size*sizeof(TGuiWidget));
@@ -236,12 +248,12 @@ int main(int argc, char** argv)
         char debug_str[256];
         u32 font_height = 9;
         sprintf(debug_str, "mouse pos (x:%d, y:%d)", tgui_global_state.mouse_x, tgui_global_state.mouse_y);
-        tgui_draw_text(&tgui_backbuffer, &test_font, font_height, 0, tgui_backbuffer.height - font_height, debug_str);
+        tgui_draw_text(&tgui_backbuffer, &test_font, font_height, 0, tgui_backbuffer.height - font_height, debug_str, strlen(debug_str));
         
         sprintf(debug_str, "ms:%.3f", debug_current_ms);
-        tgui_draw_text(&tgui_backbuffer, &test_font, font_height, 0, 0, debug_str);
+        tgui_draw_text(&tgui_backbuffer, &test_font, font_height, 0, 0, debug_str, strlen(debug_str));
         sprintf(debug_str, "fps:%d", (u32)(1.0f/debug_current_ms+0.5f));
-        tgui_draw_text(&tgui_backbuffer, &test_font, font_height, 0, font_height, debug_str);
+        tgui_draw_text(&tgui_backbuffer, &test_font, font_height, 0, font_height, debug_str, strlen(debug_str));
 
         tgui_draw_bitmap(&tgui_backbuffer, &test_bitmap, tgui_backbuffer.width - test_bitmap.width, 0, test_bitmap.width, test_bitmap.height);
         TGuiDrawCommand test_draw_bitmap_command; 
