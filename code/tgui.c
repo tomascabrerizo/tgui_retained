@@ -236,8 +236,8 @@ TGuiHandle tgui_create_slider(void)
     widget->header.type = TGUI_SLIDER;
     widget->slider.ratio = 0.5f;
     widget->slider.value = 0.5f;
-    widget->slider.grip_dimension = tgui_v2(20, 20);
-    widget->header.size = tgui_v2(200, widget->slider.grip_dimension.y);
+    widget->slider.grip_dimension = tgui_v2(15, 15);
+    widget->header.size = tgui_v2(120, widget->slider.grip_dimension.y);
     return handle;
 }
 
@@ -884,6 +884,14 @@ static void tgui_textbox_push_char(TGuiWidgetTextBox *textbox, u8 character)
     }
 }
 
+static void tgui_textbox_delete_current_char(TGuiWidgetTextBox *textbox)
+{
+    if(textbox->cursor_position > 0)
+    {
+        textbox->text_buffer[--textbox->cursor_position] = '\0';
+    }
+}
+
 static b32 tgui_textbox_update(TGuiState *state, TGuiWidgetTextBox *textbox)
 {
     TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y); 
@@ -988,12 +996,7 @@ b32 tgui_widget_render(TGuiHandle handle)
             TGuiDrawCommand draw_cmd = {0};
             draw_cmd.type = TGUI_DRAWCMD_RECT;
             u32 color = TGUI_DRAK_BLACK;
-            if(widget->container.flags & TGUI_CONTAINER_DYNAMIC) 
-            {
-                draw_cmd.type = TGUI_DRAWCMD_ROUNDED_RECT;
-                draw_cmd.ratio = 16;
-                color = TGUI_BLACK;
-            }
+            if(widget->container.flags & TGUI_CONTAINER_DYNAMIC) color = TGUI_BLACK;
             draw_cmd.descriptor.pos = widget_abs_pos;
             // TODO: maybe create a tgui_get_container_dimension function
             draw_cmd.descriptor.dim = widget->container.dimension;
@@ -1010,7 +1013,7 @@ b32 tgui_widget_render(TGuiHandle handle)
                 tgui_push_draw_command(back_grip_cmd);
 
                 TGuiDrawCommand grip_cmd = {0};
-                grip_cmd.type = TGUI_DRAWCMD_ROUNDED_RECT;
+                grip_cmd.type = TGUI_DRAWCMD_RECT;
                 grip_cmd.ratio = 4;
 
                 TGuiV2 grip_pos = widget->container.vertical_grip.pos;
@@ -1036,7 +1039,7 @@ b32 tgui_widget_render(TGuiHandle handle)
                 tgui_push_draw_command(back_grip_cmd);
 
                 TGuiDrawCommand grip_cmd = {0};
-                grip_cmd.type = TGUI_DRAWCMD_ROUNDED_RECT;
+                grip_cmd.type = TGUI_DRAWCMD_RECT;
                 grip_cmd.ratio = 4;
 
                 TGuiV2 grip_pos = widget->container.horizontal_grip.pos;
@@ -1095,7 +1098,7 @@ b32 tgui_widget_render(TGuiHandle handle)
         case TGUI_CHECKBOX:
         {
             TGuiDrawCommand draw_cmd = {0};
-            draw_cmd.type = TGUI_DRAWCMD_ROUNDED_RECT;
+            draw_cmd.type = TGUI_DRAWCMD_RECT;
             
             TGuiWidgetCheckBox *checkbox_data = &widget->checkbox;
             draw_cmd.descriptor.pos = widget_abs_pos;
@@ -1135,7 +1138,7 @@ b32 tgui_widget_render(TGuiHandle handle)
 
             TGuiWidgetSlider *slider_data = &widget->slider;
             TGuiDrawCommand draw_cmd = {0};
-            draw_cmd.type = TGUI_DRAWCMD_ROUNDED_RECT;
+            draw_cmd.type = TGUI_DRAWCMD_RECT;
             draw_cmd.descriptor.pos = widget_abs_pos;
             draw_cmd.descriptor.dim = slider_data->grip_dimension;
             draw_cmd.descriptor.x += (slider_data->value * widget->header.size.x) - (0.5f*widget->slider.grip_dimension.x);
@@ -1159,41 +1162,51 @@ b32 tgui_widget_render(TGuiHandle handle)
             start_clip_cmd.descriptor.dim = widget->textbox.dimension;
             tgui_push_draw_command(start_clip_cmd);
 
-            u32 line = 0;
-            u8 *text = widget->textbox.text_buffer;
+            TGuiState *state = &tgui_global_state;
+
+            // TODO: try to draw line, not only characters
+            TGuiV2 cursor_position = tgui_v2(0, 0);
+            u32 pos_y = 0;
+            u32 pos_x = 0;
             u8 *character = widget->textbox.text_buffer;
-            while(text)
+            for(u32 character_index = 0; character_index < widget->textbox.max_characters; ++character_index)
             {
-                u32 line_size = 0;
-                while((*character != '\n') && (*character != '\0'))
+                if((character_index != widget->textbox.cursor_position) && (character[character_index] == '\0')) 
                 {
-                    line_size++;
-                    character++;
+                    break;
                 }
-                
-                TGuiState *state = &tgui_global_state;
+                if(character[character_index] == '\n')
+                { 
+                    pos_y++;
+                    pos_x = 0;
+                    continue;
+                }
+                // TODO: each character send a draw command, the draw command queue need to be dynamic
                 TGuiDrawCommand text_cmd = {0};
-                text_cmd.type = TGUI_DRAWCMD_TEXT;
-                text_cmd.descriptor.x = widget_abs_pos.x + widget->textbox.margin;
-                text_cmd.descriptor.y = widget_abs_pos.y + widget->textbox.margin + (line * state->font_height);
-                text_cmd.text = (char *)text;
-                text_cmd.text_size = line_size;
+                text_cmd.type = TGUI_DRAWCMD_CHAR;
+                text_cmd.descriptor.x = widget_abs_pos.x + (state->font_width * pos_x) + widget->textbox.margin;
+                text_cmd.descriptor.y = widget_abs_pos.y + (state->font_height * pos_y) + widget->textbox.margin;
+                text_cmd.character = character[character_index];
                 tgui_push_draw_command(text_cmd);
                 
-                character++;
-                line++;
-                text = character;
-                // TODO: IMPORTANT: this should be check in the beginning of the while loop
-                if(*(character - 1) == '\0')
+                if(widget->textbox.cursor_position == character_index)
                 {
-                    text = 0;
+                    cursor_position = text_cmd.descriptor.pos;
                 }
+
+                pos_x++;
             }
+            
+            TGuiDrawCommand cursor_cmd = {0};
+            cursor_cmd.type = TGUI_DRAWCMD_RECT;
+            cursor_cmd.color = TGUI_GREY;
+            cursor_cmd.descriptor.pos = cursor_position;
+            cursor_cmd.descriptor.dim = tgui_v2(2, state->font_height);
+            tgui_push_draw_command(cursor_cmd);
 
             TGuiDrawCommand end_clip_cmd = {0};
             end_clip_cmd.type = TGUI_DRAWCMD_END_CLIPPING;
             tgui_push_draw_command(end_clip_cmd);
-
         }break;
         case TGUI_COUNT:
         {
@@ -1415,6 +1428,8 @@ void tgui_init(TGuiBitmap *backbuffer, TGuiFont *font)
     state->backbuffer = backbuffer;
     state->font = font;
     state->font_height = 9;
+    f32 w_ration = (f32)font->src_rect.width / (f32)font->src_rect.height;
+    state->font_width = (u32)(w_ration * (f32)state->font_height + 0.5f);
     
     tgui_widget_poll_allocator_create(&state->widget_allocator);
     
@@ -1445,11 +1460,17 @@ void tgui_update(void)
         {
             case TGUI_EVENT_KEYDOWN:
             {
-                printf("key down event!\n");  
+                if(state->widget_active)
+                {
+                    TGuiWidget *widget = tgui_widget_get(state->widget_active);
+                    if(event->key.keycode == TGUI_KEYCODE_BACKSPACE)
+                    {
+                        tgui_textbox_delete_current_char(&widget->textbox); 
+                    }
+                }
             } break;
             case TGUI_EVENT_KEYUP:
             {
-                printf("key up event!\n");  
             } break;
             case TGUI_EVENT_MOUSEMOVE:
             {
@@ -1532,6 +1553,10 @@ void tgui_draw_command_buffer(void)
             {
                 tgui_draw_bitmap(state->backbuffer, draw_cmd.bitmap, draw_cmd.descriptor.x, draw_cmd.descriptor.y, draw_cmd.descriptor.width, draw_cmd.descriptor.height);
             } break;
+            case TGUI_DRAWCMD_CHAR:
+            {
+                tgui_draw_char(state->backbuffer, state->font, state->font_height, draw_cmd.descriptor.x, draw_cmd.descriptor.y, draw_cmd.character);
+            } break;
             case TGUI_DRAWCMD_TEXT:
             {
                 tgui_draw_text(state->backbuffer, state->font, state->font_height, draw_cmd.descriptor.x, draw_cmd.descriptor.y, draw_cmd.text, draw_cmd.text_size);
@@ -1541,6 +1566,40 @@ void tgui_draw_command_buffer(void)
                 ASSERT(!"invalid code path");
             } break;
         }
+    }
+}
+
+//-----------------------------------------------------
+// NOTE: platform functions
+//-----------------------------------------------------
+TGuiKeyCode tgui_win32_translate_keycode(u32 keycode)
+{
+    switch(keycode)
+    {
+        case 0x25:
+        {
+            return TGUI_KEYCODE_LEFT;
+        }break;
+        case 0x26:
+        {
+            return TGUI_KEYCODE_UP;
+        }break;
+        case 0x27:
+        {
+            return TGUI_KEYCODE_RIGHT;
+        }break;
+        case 0x28:
+        {
+            return TGUI_KEYCODE_DOWN;
+        }break;
+        case 0x08:
+        {
+            return TGUI_KEYCODE_BACKSPACE;
+        }break;
+        default:
+        {
+            return TGUI_KEYCODE_NONE;
+        }break;
     }
 }
 
@@ -1677,7 +1736,7 @@ void tgui_clipping_stack_push(TGuiClippingStack *stack, TGuiRect clipping)
 {
     // TODO: remove this ASSERT();
     ASSERT(stack->buffer_size < 16);
-
+    
     if(stack->top == stack->buffer_size)
     {
         u32 new_buffer_size = stack->buffer_size * 2;

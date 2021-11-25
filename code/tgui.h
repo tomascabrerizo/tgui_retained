@@ -91,6 +91,24 @@ typedef enum TGuiEventType
     TGUI_EVENT_COUNT,
 } TGuiEventType;
 
+typedef enum TGuiKeyCode
+{
+    TGUI_KEYCODE_NONE,
+    TGUI_KEYCODE_BACKSPACE,
+    TGUI_KEYCODE_RIGHT,
+    TGUI_KEYCODE_LEFT,
+    TGUI_KEYCODE_UP,
+    TGUI_KEYCODE_DOWN,
+
+    TGUI_KEYCODE_COUNT,
+} TGuiKeyCode;
+
+typedef struct TGuiEventKey
+{
+    TGuiEventType type;
+    TGuiKeyCode keycode; 
+} TGuiEventKey;
+
 typedef struct TGuiEventMouseMove
 {
     TGuiEventType type;
@@ -109,6 +127,7 @@ typedef union TGuiEvent
     TGuiEventType type;
     // ---------------- 
     TGuiEventMouseMove mouse;
+    TGuiEventKey key;
     TGuiEventChar character;
 } TGuiEvent;
 
@@ -128,6 +147,7 @@ typedef enum TGuiDrawCommandType
     TGUI_DRAWCMD_ROUNDED_RECT,
     TGUI_DRAWCMD_BITMAP,
     TGUI_DRAWCMD_TEXT,
+    TGUI_DRAWCMD_CHAR,
     
     TGUI_DRAWCMD_COUNT,
 } TGuiDrawCommandType;
@@ -139,12 +159,13 @@ typedef struct TGuiDrawCommand
     TGuiBitmap *bitmap;
     u32 ratio;
     u32 color;
+    u8 character;
     char *text;
     u32 text_size;
 } TGuiDrawCommand;
 
 // TODO: make container structs for this queues, like std::vector<> in c++
-#define TGUI_DRAW_COMMANDS_MAX 128
+#define TGUI_DRAW_COMMANDS_MAX 512 
 typedef struct TGuiDrawCommandBuffer
 {
     TGuiDrawCommand buffer[TGUI_DRAW_COMMANDS_MAX];
@@ -306,6 +327,7 @@ typedef struct TGuiState
     
     TGuiFont *font;
     u32 font_height;
+    u32 font_width;
 
     TGuiDrawCommandBuffer draw_command_buffer;
     TGuiEventQueue event_queue;
@@ -372,6 +394,11 @@ TGuiWidget *tgui_widget_get(TGuiHandle handle);
 
 TGUI_API TGuiRect tgui_rect_xywh(f32 x, f32 y, f32 width, f32 height);
 TGUI_API b32 tgui_point_inside_rect(TGuiV2 point, TGuiRect rect);
+
+//-----------------------------------------------------
+// NOTE: platform functions
+//-----------------------------------------------------
+TGUI_API TGuiKeyCode tgui_win32_translate_keycode(u32 keycode);
 
 //-----------------------------------------------------
 // NOTE: DEBUG function

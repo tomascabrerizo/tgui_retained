@@ -54,9 +54,17 @@ static LRESULT win32_window_proc(HWND window, UINT message, WPARAM w_param, LPAR
         }break;
         case WM_KEYDOWN:
         {
+            TGuiEventKey key_event = {0};
+            key_event.type = TGUI_EVENT_KEYDOWN;
+            key_event.keycode = tgui_win32_translate_keycode((u32)w_param);
+            tgui_push_event((TGuiEvent)key_event);
         }break;
         case WM_KEYUP:
         {
+            TGuiEventKey key_event = {0};
+            key_event.type = TGUI_EVENT_KEYUP;
+            key_event.keycode = tgui_win32_translate_keycode((u32)w_param);
+            tgui_push_event((TGuiEvent)key_event);
         }break;
         case WM_MOUSEMOVE:
         {
@@ -133,7 +141,7 @@ int main(int argc, char** argv)
     global_running = true;
     win32_create_backbuffer(global_device_context);
    
-    u32 frames_per_second = 60;
+    u32 frames_per_second = 30;
     u32 ms_per_frame = 1000 / frames_per_second;
     f32 delta_time = 1.0f / (f32)frames_per_second;
     LARGE_INTEGER large_frequency;
