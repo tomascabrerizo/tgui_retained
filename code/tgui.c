@@ -881,6 +881,7 @@ static void tgui_textbox_push_char(TGuiWidgetTextBox *textbox, u8 character)
     if(textbox->cursor_position < textbox->max_characters)
     {
         textbox->text_buffer[textbox->cursor_position++] = character;
+        textbox->current_size++;
     }
 }
 
@@ -889,7 +890,81 @@ static void tgui_textbox_delete_current_char(TGuiWidgetTextBox *textbox)
     if(textbox->cursor_position > 0)
     {
         textbox->text_buffer[--textbox->cursor_position] = '\0';
+        textbox->current_size--;
     }
+}
+
+static i32 tgui_textbox_get_line_cursor_position(TGuiWidgetTextBox *textbox)
+{
+    i32 position = textbox->cursor_position;
+    do
+    {
+        if(position <= 0)
+        {
+            return textbox->cursor_position;
+        };
+        position--;
+    }
+    while(textbox->text_buffer[position] != '\n');
+    i32 result = textbox->cursor_position - (position+1);
+    return result;
+}
+
+static i32 tgui_textbox_get_prev_line_size(TGuiWidgetTextBox *textbox)
+{
+    i32 current_cursor_position = tgui_textbox_get_line_cursor_position(textbox);
+    i32 new_line_pos = (textbox->cursor_position - current_cursor_position - 1);
+    if(new_line_pos < 0) return -1;
+    
+    u32 line_size = 0;
+    i32 position = new_line_pos-1;
+    do
+    {
+        if(position <= 0)
+        {
+            return new_line_pos;
+        }
+        position--;
+        line_size++;
+    }
+    while(textbox->text_buffer[position] != '\n');
+    return line_size;
+}
+
+static void tgui_textbox_move_cursor_left(TGuiWidgetTextBox *textbox)
+{
+    if(textbox->cursor_position > 0)
+    {
+        textbox->cursor_position--;
+    }
+}
+
+static void tgui_textbox_move_cursor_right(TGuiWidgetTextBox *textbox)
+{
+    if(textbox->cursor_position < textbox->current_size)
+    {
+        textbox->cursor_position++;
+    }
+}
+
+static void tgui_textbox_move_cursor_up(TGuiWidgetTextBox *textbox)
+{
+    i32 prev_line_size = tgui_textbox_get_prev_line_size(textbox);
+    if(prev_line_size >= 0)
+    {
+        i32 cursor_position = (i32)textbox->cursor_position;
+        i32 line_position = tgui_textbox_get_line_cursor_position(textbox);
+        i32 prev_line = (cursor_position - line_position - 1) - prev_line_size;
+        if(line_position > prev_line_size) line_position = prev_line_size;
+        textbox->cursor_position = prev_line + line_position;
+        printf("%d\n", textbox->cursor_position);
+    }
+    
+}
+
+static void tgui_textbox_move_cursor_down(TGuiWidgetTextBox *textbox)
+{
+    UNUSED_VAR(textbox);
 }
 
 static b32 tgui_textbox_update(TGuiState *state, TGuiWidgetTextBox *textbox)
@@ -1177,6 +1252,13 @@ b32 tgui_widget_render(TGuiHandle handle)
                 }
                 if(character[character_index] == '\n')
                 { 
+                    if(widget->textbox.cursor_position == character_index)
+                    {
+                        // TODO: refactor this code this is ugly
+                        cursor_position.x = widget_abs_pos.x + (state->font_width * pos_x) + widget->textbox.margin;
+                        cursor_position.y = widget_abs_pos.y + (state->font_height * pos_y) + widget->textbox.margin;
+                    }
+                    
                     pos_y++;
                     pos_x = 0;
                     continue;
@@ -1463,9 +1545,28 @@ void tgui_update(void)
                 if(state->widget_active)
                 {
                     TGuiWidget *widget = tgui_widget_get(state->widget_active);
-                    if(event->key.keycode == TGUI_KEYCODE_BACKSPACE)
+                    if(widget->header.type == TGUI_TEXTBOX)
                     {
-                        tgui_textbox_delete_current_char(&widget->textbox); 
+                        if(event->key.keycode == TGUI_KEYCODE_BACKSPACE)
+                        {
+                            tgui_textbox_delete_current_char(&widget->textbox); 
+                        }
+                        if(event->key.keycode == TGUI_KEYCODE_LEFT)
+                        {
+                            tgui_textbox_move_cursor_left(&widget->textbox); 
+                        }
+                        if(event->key.keycode == TGUI_KEYCODE_RIGHT)
+                        {
+                            tgui_textbox_move_cursor_right(&widget->textbox); 
+                        }
+                        if(event->key.keycode == TGUI_KEYCODE_UP)
+                        {
+                            tgui_textbox_move_cursor_up(&widget->textbox); 
+                        }
+                        if(event->key.keycode == TGUI_KEYCODE_DOWN)
+                        {
+                            tgui_textbox_move_cursor_down(&widget->textbox); 
+                        }
                     }
                 }
             } break;

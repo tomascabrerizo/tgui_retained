@@ -290,8 +290,9 @@ typedef struct TGuiWidgetTextBox
     b32 hot;
     TGuiV2 dimension;
     u32 margin;
-    u32  cursor_position;
+    u32 cursor_position;
     u32 max_characters;
+    u32 current_size;
     u8 *text_buffer;
 } TGuiWidgetTextBox;
 
