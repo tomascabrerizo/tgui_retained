@@ -44,6 +44,12 @@ typedef struct TGuiV2
     f32 y;
 } TGuiV2;
 
+typedef struct TGuiV2i
+{
+    i32 x;
+    i32 y;
+} TGuiV2i;
+
 typedef union TGuiRect
 {
     struct
@@ -283,17 +289,39 @@ typedef struct TGuiWidgetSlider
     TGuiV2 grip_dimension;
 } TGuiWidgetSlider;
 
+#define TGUI_DEFAULT_LINE_SIZE 4
+typedef struct TGuiCharacterAllocator
+{
+    u8 *buffer;
+    u32 count;
+    u32 buffer_size;
+} TGuiCharacterAllocator;
+// TODO: this functions can be remove from the header
+void tgui_character_allocator_create(TGuiCharacterAllocator *allocator);
+void tgui_character_allocator_destory(TGuiCharacterAllocator *allocator);
+u8 *tgui_character_allocator_pull(TGuiCharacterAllocator *allocator);
+
+#define TGUI_DEFAULT_NUM_LINES 2
+typedef struct TGuiLineAllocator
+{
+    TGuiCharacterAllocator *buffer;
+    u32 count;
+    u32 buffer_size;
+} TGuiLineAllocator;
+// TODO: this functions can be remove from the header
+void tgui_line_allocator_create(TGuiLineAllocator *allocator);
+void tgui_line_allocator_destory(TGuiLineAllocator *allocator);
+TGuiCharacterAllocator *tgui_line_allocator_pull(TGuiLineAllocator *allocator);
+
 typedef struct TGuiWidgetTextBox
 {
     TGuiWidgetHeader header;
     //----------------------
     b32 hot;
+    TGuiLineAllocator allocator;
+    TGuiV2i cursor_position;
     TGuiV2 dimension;
     u32 margin;
-    u32 cursor_position;
-    u32 max_characters;
-    u32 current_size;
-    u8 *text_buffer;
 } TGuiWidgetTextBox;
 
 typedef union TGuiWidget

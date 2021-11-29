@@ -15,6 +15,26 @@ TGuiClippingStack global_clipping_stack;
 //-----------------------------------------------------
 //  NOTE: inline math functions
 //-----------------------------------------------------
+inline static TGuiV2i tgui_v2i(i32 x, i32 y)
+{
+    TGuiV2i result;
+    result.x = x;
+    result.y = y;
+    return result;
+}
+
+inline static TGuiV2i tgui_v2i_add(TGuiV2i a, TGuiV2i b)
+{
+    TGuiV2i result = tgui_v2i(a.x + b.x, a.y + b.y);
+    return result;
+}
+
+inline static TGuiV2i tgui_v2i_sub(TGuiV2i a, TGuiV2i b)
+{
+    TGuiV2i result = tgui_v2i(a.x - b.x, a.y - b.y);
+    return result;
+}
+
 inline static TGuiV2 tgui_v2(f32 x, f32 y)
 {
     TGuiV2 result;
@@ -250,10 +270,9 @@ TGuiHandle tgui_create_textbox(u32 width, u32 height)
     
     widget->textbox.margin = 10;
     widget->textbox.dimension = tgui_v2_sub(tgui_v2(width, height), tgui_v2(widget->textbox.margin*2, widget->textbox.margin*2));
-    widget->textbox.cursor_position = 0;
-    widget->textbox.max_characters = 128;
-    widget->textbox.text_buffer = (u8 *)malloc(widget->textbox.max_characters*sizeof(u8));
-    memset(widget->textbox.text_buffer, 0, widget->textbox.max_characters*sizeof(u8));
+    widget->textbox.cursor_position = tgui_v2i(0, 0);
+    tgui_line_allocator_create(&widget->textbox.allocator);
+    tgui_line_allocator_pull(&widget->textbox.allocator);
     
     return handle;
 }
@@ -876,90 +895,19 @@ static b32 tgui_slider_update(TGuiState *state, TGuiWidgetSlider *slider)
     return false;
 }
 
-static void tgui_textbox_push_char(TGuiWidgetTextBox *textbox, u8 character)
-{
-    if(textbox->cursor_position < textbox->max_characters)
-    {
-        textbox->text_buffer[textbox->cursor_position++] = character;
-        textbox->current_size++;
-    }
-}
-
-static void tgui_textbox_delete_current_char(TGuiWidgetTextBox *textbox)
-{
-    if(textbox->cursor_position > 0)
-    {
-        textbox->text_buffer[--textbox->cursor_position] = '\0';
-        textbox->current_size--;
-    }
-}
-
-static i32 tgui_textbox_get_line_cursor_position(TGuiWidgetTextBox *textbox)
-{
-    i32 position = textbox->cursor_position;
-    do
-    {
-        if(position <= 0)
-        {
-            return textbox->cursor_position;
-        };
-        position--;
-    }
-    while(textbox->text_buffer[position] != '\n');
-    i32 result = textbox->cursor_position - (position+1);
-    return result;
-}
-
-static i32 tgui_textbox_get_prev_line_size(TGuiWidgetTextBox *textbox)
-{
-    i32 current_cursor_position = tgui_textbox_get_line_cursor_position(textbox);
-    i32 new_line_pos = (textbox->cursor_position - current_cursor_position - 1);
-    if(new_line_pos < 0) return -1;
-    
-    u32 line_size = 0;
-    i32 position = new_line_pos-1;
-    do
-    {
-        if(position <= 0)
-        {
-            return new_line_pos;
-        }
-        position--;
-        line_size++;
-    }
-    while(textbox->text_buffer[position] != '\n');
-    return line_size;
-}
-
 static void tgui_textbox_move_cursor_left(TGuiWidgetTextBox *textbox)
 {
-    if(textbox->cursor_position > 0)
-    {
-        textbox->cursor_position--;
-    }
+    UNUSED_VAR(textbox);
 }
 
 static void tgui_textbox_move_cursor_right(TGuiWidgetTextBox *textbox)
 {
-    if(textbox->cursor_position < textbox->current_size)
-    {
-        textbox->cursor_position++;
-    }
+    UNUSED_VAR(textbox);
 }
 
 static void tgui_textbox_move_cursor_up(TGuiWidgetTextBox *textbox)
 {
-    i32 prev_line_size = tgui_textbox_get_prev_line_size(textbox);
-    if(prev_line_size >= 0)
-    {
-        i32 cursor_position = (i32)textbox->cursor_position;
-        i32 line_position = tgui_textbox_get_line_cursor_position(textbox);
-        i32 prev_line = (cursor_position - line_position - 1) - prev_line_size;
-        if(line_position > prev_line_size) line_position = prev_line_size;
-        textbox->cursor_position = prev_line + line_position;
-        printf("%d\n", textbox->cursor_position);
-    }
-    
+    UNUSED_VAR(textbox);
 }
 
 static void tgui_textbox_move_cursor_down(TGuiWidgetTextBox *textbox)
@@ -1229,62 +1177,27 @@ b32 tgui_widget_render(TGuiHandle handle)
             draw_cmd.descriptor.dim = widget->header.size;
             draw_cmd.color = TGUI_DRAK_BLACK;
             tgui_push_draw_command(draw_cmd);
-            
 
             TGuiDrawCommand start_clip_cmd = {0};
             start_clip_cmd.type = TGUI_DRAWCMD_START_CLIPPING;
             start_clip_cmd.descriptor.pos = tgui_v2_add(widget_abs_pos, tgui_v2(widget->textbox.margin, widget->textbox.margin));
             start_clip_cmd.descriptor.dim = widget->textbox.dimension;
             tgui_push_draw_command(start_clip_cmd);
-
+    
             TGuiState *state = &tgui_global_state;
-
-            // TODO: try to draw line, not only characters
-            TGuiV2 cursor_position = tgui_v2(0, 0);
-            u32 pos_y = 0;
-            u32 pos_x = 0;
-            u8 *character = widget->textbox.text_buffer;
-            for(u32 character_index = 0; character_index < widget->textbox.max_characters; ++character_index)
+            for(u32 line_index = 0; line_index < widget->textbox.allocator.count; ++line_index)
             {
-                if((character_index != widget->textbox.cursor_position) && (character[character_index] == '\0')) 
+                TGuiCharacterAllocator *line = widget->textbox.allocator.buffer + line_index;
+                for(u32 character_index = 0; character_index < line->count; ++character_index)
                 {
-                    break;
+                    TGuiDrawCommand text_cmd = {0};
+                    text_cmd.type = TGUI_DRAWCMD_CHAR;
+                    text_cmd.descriptor.x = widget_abs_pos.x + (state->font_width * character_index) + widget->textbox.margin;
+                    text_cmd.descriptor.y = widget_abs_pos.y + (state->font_height * line_index) + widget->textbox.margin;
+                    text_cmd.character = line->buffer[character_index];
+                    tgui_push_draw_command(text_cmd);
                 }
-                if(character[character_index] == '\n')
-                { 
-                    if(widget->textbox.cursor_position == character_index)
-                    {
-                        // TODO: refactor this code this is ugly
-                        cursor_position.x = widget_abs_pos.x + (state->font_width * pos_x) + widget->textbox.margin;
-                        cursor_position.y = widget_abs_pos.y + (state->font_height * pos_y) + widget->textbox.margin;
-                    }
-                    
-                    pos_y++;
-                    pos_x = 0;
-                    continue;
-                }
-                // TODO: each character send a draw command, the draw command queue need to be dynamic
-                TGuiDrawCommand text_cmd = {0};
-                text_cmd.type = TGUI_DRAWCMD_CHAR;
-                text_cmd.descriptor.x = widget_abs_pos.x + (state->font_width * pos_x) + widget->textbox.margin;
-                text_cmd.descriptor.y = widget_abs_pos.y + (state->font_height * pos_y) + widget->textbox.margin;
-                text_cmd.character = character[character_index];
-                tgui_push_draw_command(text_cmd);
-                
-                if(widget->textbox.cursor_position == character_index)
-                {
-                    cursor_position = text_cmd.descriptor.pos;
-                }
-
-                pos_x++;
             }
-            
-            TGuiDrawCommand cursor_cmd = {0};
-            cursor_cmd.type = TGUI_DRAWCMD_RECT;
-            cursor_cmd.color = TGUI_GREY;
-            cursor_cmd.descriptor.pos = cursor_position;
-            cursor_cmd.descriptor.dim = tgui_v2(2, state->font_height);
-            tgui_push_draw_command(cursor_cmd);
 
             TGuiDrawCommand end_clip_cmd = {0};
             end_clip_cmd.type = TGUI_DRAWCMD_END_CLIPPING;
@@ -1389,6 +1302,70 @@ b32 tgui_widget_recursive_descent_pos_last_to_first(TGuiHandle handle, TGuiWidge
 //-----------------------------------------------------
 //  NOTE: memory management functions
 //-----------------------------------------------------
+void tgui_character_allocator_create(TGuiCharacterAllocator *allocator)
+{
+    allocator->buffer_size = TGUI_DEFAULT_LINE_SIZE;
+    allocator->buffer = (u8 *)malloc(allocator->buffer_size*sizeof(u8));
+    allocator->count = 0;
+}
+
+void tgui_character_allocator_destory(TGuiCharacterAllocator *allocator)
+{
+    free(allocator->buffer);
+    allocator->buffer_size = 0;
+    allocator->count = 0;
+}
+
+u8 *tgui_character_allocator_pull(TGuiCharacterAllocator *allocator)
+{
+    u8 *result = 0;
+    if(allocator->count >= allocator->buffer_size)
+    {
+        u32 new_buffer_size = allocator->buffer_size * 2;
+        u8 *new_buffer = (u8 *)malloc(new_buffer_size*sizeof(u8));
+        memcpy(new_buffer, allocator->buffer, allocator->buffer_size*sizeof(u8));
+        allocator->buffer = new_buffer;
+        allocator->buffer_size = new_buffer_size;
+    }
+    result = allocator->buffer + allocator->count;
+    allocator->count++;
+    return result;
+}
+
+void tgui_line_allocator_create(TGuiLineAllocator *allocator)
+{
+    allocator->buffer_size = TGUI_DEFAULT_NUM_LINES;
+    allocator->buffer = (TGuiCharacterAllocator *)malloc(allocator->buffer_size*sizeof(TGuiCharacterAllocator));
+    allocator->count = 0;
+}
+
+void tgui_line_allocator_destory(TGuiLineAllocator *allocator)
+{
+    for(u32 index = 0; index < allocator->count; ++index)
+    {
+        tgui_character_allocator_destory(allocator->buffer + index);
+    }
+    free(allocator->buffer);
+    allocator->buffer_size = 0;
+    allocator->count = 0;
+}
+
+TGuiCharacterAllocator *tgui_line_allocator_pull(TGuiLineAllocator *allocator)
+{
+    TGuiCharacterAllocator *result = 0;
+    if(allocator->count >= allocator->buffer_size)
+    {
+        u32 new_buffer_size = allocator->buffer_size * 2;
+        TGuiCharacterAllocator *new_buffer = (TGuiCharacterAllocator *)malloc(new_buffer_size*sizeof(TGuiCharacterAllocator));
+        memcpy(new_buffer, allocator->buffer, allocator->buffer_size*sizeof(TGuiCharacterAllocator));
+        allocator->buffer = new_buffer;
+        allocator->buffer_size = new_buffer_size;
+    }
+    result = allocator->buffer + allocator->count;
+    tgui_character_allocator_create(result);
+    allocator->count++;
+    return result;
+}
 
 void tgui_widget_poll_allocator_create(TGuiWidgetPoolAllocator *allocator)
 {
@@ -1437,8 +1414,7 @@ void tgui_widget_allocator_free(TGuiWidgetPoolAllocator *allocator, TGuiHandle *
     TGuiWidget *widget = tgui_widget_get(*handle);
     if(widget->header.type == TGUI_TEXTBOX)
     {
-        free(widget->textbox.text_buffer);
-        widget->textbox.text_buffer = 0;
+        tgui_line_allocator_destory(&widget->textbox.allocator);
     }
 
     TGuiWidgetFree *free_widget = (TGuiWidgetFree *)(allocator->buffer + *handle);
@@ -1549,7 +1525,6 @@ void tgui_update(void)
                     {
                         if(event->key.keycode == TGUI_KEYCODE_BACKSPACE)
                         {
-                            tgui_textbox_delete_current_char(&widget->textbox); 
                         }
                         if(event->key.keycode == TGUI_KEYCODE_LEFT)
                         {
@@ -1598,7 +1573,16 @@ void tgui_update(void)
                     {
                         if(event->character.character == 13) event->character.character = '\n';
                         else if((event->character.character < ' ') || (event->character.character > '~')) break;
-                        tgui_textbox_push_char(&widget->textbox, event->character.character); 
+                        TGuiCharacterAllocator *line = widget->textbox.allocator.buffer + widget->textbox.cursor_position.y;
+                        u8 *character = tgui_character_allocator_pull(line);
+                        *character = event->character.character;
+                        widget->textbox.cursor_position.x++;
+                        if(event->character.character == '\n')
+                        {
+                            tgui_line_allocator_pull(&widget->textbox.allocator);
+                            widget->textbox.cursor_position.y++;
+                            widget->textbox.cursor_position.x = 0;
+                        }
                     }
                 }
             } break;
