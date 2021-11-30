@@ -987,6 +987,24 @@ static void tgui_textbox_move_cursor_down(TGuiWidgetTextBox *textbox)
     }
 }
 
+static void tgui_textbox_push_character(TGuiWidgetTextBox *textbox, u8 character)
+{
+    TGuiCharacterAllocator *line = textbox->allocator.buffer + textbox->cursor_position.y;
+    u8 *last_character = tgui_character_allocator_pull(line);
+    if((u32)textbox->cursor_position.x < (line->count - 1))
+    {
+        u8 *current_character = line->buffer + textbox->cursor_position.x;
+        memcpy(current_character + 1, current_character, (u32)(last_character - current_character));
+        *current_character = character;
+    }
+    else
+    {
+        *last_character = character;
+    }
+    
+    textbox->cursor_position.x++;
+}
+
 static b32 tgui_textbox_update(TGuiState *state, TGuiWidgetTextBox *textbox)
 {
     TGuiV2 mouse = tgui_v2(state->mouse_x, state->mouse_y); 
@@ -1664,10 +1682,7 @@ void tgui_update(void)
                         }
                         else
                         {
-                            TGuiCharacterAllocator *line = widget->textbox.allocator.buffer + widget->textbox.cursor_position.y;
-                            u8 *character = tgui_character_allocator_pull(line);
-                            *character = event->character.character;
-                            widget->textbox.cursor_position.x++;
+                            tgui_textbox_push_character(&widget->textbox, event->character.character);
                         }
                     }
                 }
