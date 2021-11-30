@@ -895,24 +895,96 @@ static b32 tgui_slider_update(TGuiState *state, TGuiWidgetSlider *slider)
     return false;
 }
 
+inline static TGuiCharacterAllocator *tgui_textbox_get_cursor_prev_line(TGuiWidgetTextBox *textbox)
+{
+    i32 prev_line_pos = textbox->cursor_position.y - 1;
+    TGuiCharacterAllocator *line = 0;
+    if(prev_line_pos >= 0)
+    {
+        line = textbox->allocator.buffer + prev_line_pos;
+    }
+    return line;
+}
+
+inline static TGuiCharacterAllocator *tgui_textbox_get_cursor_line(TGuiWidgetTextBox *textbox)
+{
+    // TODO: check for buffer overflow and underflow
+    TGuiCharacterAllocator *line = textbox->allocator.buffer + textbox->cursor_position.y;
+    return line;
+}
+
+inline static TGuiCharacterAllocator *tgui_textbox_get_cursor_next_line(TGuiWidgetTextBox *textbox)
+{
+    i32 next_line_pos = textbox->cursor_position.y + 1;
+    TGuiCharacterAllocator *line = 0;
+    if((u32)next_line_pos < textbox->allocator.count)
+    {
+        line = textbox->allocator.buffer + next_line_pos;
+    }
+    return line;
+}
+
 static void tgui_textbox_move_cursor_left(TGuiWidgetTextBox *textbox)
 {
-    UNUSED_VAR(textbox);
+    i32 new_position_x = textbox->cursor_position.x - 1;
+    if(new_position_x < 0)
+    {
+        TGuiCharacterAllocator *prev_line = tgui_textbox_get_cursor_prev_line(textbox);
+        if(prev_line)
+        {
+            textbox->cursor_position.x = prev_line->count + (new_position_x + 1);
+            --textbox->cursor_position.y;
+        }
+    }
+    else
+    {
+        textbox->cursor_position.x = new_position_x;
+    }
 }
 
 static void tgui_textbox_move_cursor_right(TGuiWidgetTextBox *textbox)
 {
-    UNUSED_VAR(textbox);
+    TGuiCharacterAllocator *line = tgui_textbox_get_cursor_line(textbox);
+    i32 new_position_x = textbox->cursor_position.x + 1;
+    if((u32)new_position_x > line->count) 
+    {
+        TGuiCharacterAllocator *next_line = tgui_textbox_get_cursor_next_line(textbox);
+        if(next_line)
+        {
+            textbox->cursor_position.x = (new_position_x - 1) - (i32)line->count;
+            ++textbox->cursor_position.y;
+        }
+    }
+    else
+    {
+        textbox->cursor_position.x = new_position_x;
+    }
 }
 
 static void tgui_textbox_move_cursor_up(TGuiWidgetTextBox *textbox)
 {
-    UNUSED_VAR(textbox);
+    TGuiCharacterAllocator *prev_line = tgui_textbox_get_cursor_prev_line(textbox);
+    if(prev_line)
+    {
+        if((u32)textbox->cursor_position.x > prev_line->count)
+        {
+            textbox->cursor_position.x = prev_line->count;
+        }
+        --textbox->cursor_position.y;
+    }
 }
 
 static void tgui_textbox_move_cursor_down(TGuiWidgetTextBox *textbox)
 {
-    UNUSED_VAR(textbox);
+    TGuiCharacterAllocator *next_line = tgui_textbox_get_cursor_next_line(textbox);
+    if(next_line)
+    {
+        if((u32)textbox->cursor_position.x > next_line->count)
+        {
+            textbox->cursor_position.x = next_line->count;
+        }
+        ++textbox->cursor_position.y;
+    }
 }
 
 static b32 tgui_textbox_update(TGuiState *state, TGuiWidgetTextBox *textbox)
@@ -1188,16 +1260,23 @@ b32 tgui_widget_render(TGuiHandle handle)
             for(u32 line_index = 0; line_index < widget->textbox.allocator.count; ++line_index)
             {
                 TGuiCharacterAllocator *line = widget->textbox.allocator.buffer + line_index;
-                for(u32 character_index = 0; character_index < line->count; ++character_index)
-                {
-                    TGuiDrawCommand text_cmd = {0};
-                    text_cmd.type = TGUI_DRAWCMD_CHAR;
-                    text_cmd.descriptor.x = widget_abs_pos.x + (state->font_width * character_index) + widget->textbox.margin;
-                    text_cmd.descriptor.y = widget_abs_pos.y + (state->font_height * line_index) + widget->textbox.margin;
-                    text_cmd.character = line->buffer[character_index];
-                    tgui_push_draw_command(text_cmd);
-                }
+                TGuiDrawCommand text_cmd = {0};
+                text_cmd.type = TGUI_DRAWCMD_TEXT;
+                text_cmd.descriptor.x = widget_abs_pos.x + widget->textbox.margin;
+                text_cmd.descriptor.y = widget_abs_pos.y + (state->font_height * line_index) + widget->textbox.margin;
+                text_cmd.text = (char *)line->buffer;
+                text_cmd.text_size = line->count;
+                tgui_push_draw_command(text_cmd);
             }
+            
+            TGuiDrawCommand cursor_cmd = {0};
+            cursor_cmd.type = TGUI_DRAWCMD_RECT;
+            cursor_cmd.descriptor.x = widget_abs_pos.x + (state->font_width *  widget->textbox.cursor_position.x) + widget->textbox.margin;
+            cursor_cmd.descriptor.y = widget_abs_pos.y + (state->font_height * widget->textbox.cursor_position.y) + widget->textbox.margin;
+            cursor_cmd.descriptor.width = 2;
+            cursor_cmd.descriptor.height = state->font_height;
+            cursor_cmd.color = TGUI_GREEN;
+            tgui_push_draw_command(cursor_cmd);
 
             TGuiDrawCommand end_clip_cmd = {0};
             end_clip_cmd.type = TGUI_DRAWCMD_END_CLIPPING;
@@ -1211,6 +1290,9 @@ b32 tgui_widget_render(TGuiHandle handle)
     return false;
 }
 
+//-----------------------------------------------------
+// NOTE: recursive functions TODO: change to use STAKS
+//-----------------------------------------------------
 b32 tgui_widget_recursive_descent_pre_first_to_last(TGuiHandle handle, TGuiWidgetFP function)
 {
     TGuiWidget *widget = tgui_widget_get(handle);
@@ -1573,15 +1655,19 @@ void tgui_update(void)
                     {
                         if(event->character.character == 13) event->character.character = '\n';
                         else if((event->character.character < ' ') || (event->character.character > '~')) break;
-                        TGuiCharacterAllocator *line = widget->textbox.allocator.buffer + widget->textbox.cursor_position.y;
-                        u8 *character = tgui_character_allocator_pull(line);
-                        *character = event->character.character;
-                        widget->textbox.cursor_position.x++;
+                        
                         if(event->character.character == '\n')
                         {
                             tgui_line_allocator_pull(&widget->textbox.allocator);
                             widget->textbox.cursor_position.y++;
                             widget->textbox.cursor_position.x = 0;
+                        }
+                        else
+                        {
+                            TGuiCharacterAllocator *line = widget->textbox.allocator.buffer + widget->textbox.cursor_position.y;
+                            u8 *character = tgui_character_allocator_pull(line);
+                            *character = event->character.character;
+                            widget->textbox.cursor_position.x++;
                         }
                     }
                 }
