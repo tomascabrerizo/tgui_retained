@@ -100,6 +100,7 @@ typedef enum TGuiEventType
 typedef enum TGuiKeyCode
 {
     TGUI_KEYCODE_NONE,
+    TGUI_KEYCODE_ENTER,
     TGUI_KEYCODE_BACKSPACE,
     TGUI_KEYCODE_RIGHT,
     TGUI_KEYCODE_LEFT,
@@ -300,6 +301,7 @@ typedef struct TGuiCharacterAllocator
 void tgui_character_allocator_create(TGuiCharacterAllocator *allocator);
 void tgui_character_allocator_destory(TGuiCharacterAllocator *allocator);
 u8 *tgui_character_allocator_pull(TGuiCharacterAllocator *allocator);
+void tgui_character_allocator_clear(TGuiCharacterAllocator *allocator);
 
 #define TGUI_DEFAULT_NUM_LINES 2
 typedef struct TGuiLineAllocator

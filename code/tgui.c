@@ -994,7 +994,7 @@ static void tgui_textbox_push_character(TGuiWidgetTextBox *textbox, u8 character
     if((u32)textbox->cursor_position.x < (line->count - 1))
     {
         u8 *current_character = line->buffer + textbox->cursor_position.x;
-        memcpy(current_character + 1, current_character, (u32)(last_character - current_character));
+        memcpy(current_character + 1, current_character, (u64)(last_character - current_character));
         *current_character = character;
     }
     else
@@ -1003,6 +1003,28 @@ static void tgui_textbox_push_character(TGuiWidgetTextBox *textbox, u8 character
     }
     
     textbox->cursor_position.x++;
+}
+
+static void tgui_textbox_push_newline(TGuiWidgetTextBox *textbox)
+{
+    TGuiCharacterAllocator *last_line = tgui_line_allocator_pull(&textbox->allocator);
+    textbox->cursor_position.y++;
+    
+    TGuiCharacterAllocator temp_last_line = *last_line;
+    TGuiCharacterAllocator *current_line = textbox->allocator.buffer + (textbox->cursor_position.y - 1);
+    TGuiCharacterAllocator *next_line = current_line + 1;
+
+    memcpy(current_line + 1, current_line, (u64)(last_line - current_line) * sizeof(TGuiCharacterAllocator));
+    *next_line = temp_last_line;
+    u32 characters_to_move = current_line->count - textbox->cursor_position.x;
+    for(u32 character_index = characters_to_move; character_index > 0; --character_index)
+    {
+        u8 *character = tgui_character_allocator_pull(next_line);
+        *character = current_line->buffer[current_line->count - character_index];
+    }
+    current_line->count -= characters_to_move;
+    
+    textbox->cursor_position.x = 0;
 }
 
 static b32 tgui_textbox_update(TGuiState *state, TGuiWidgetTextBox *textbox)
@@ -1432,6 +1454,12 @@ u8 *tgui_character_allocator_pull(TGuiCharacterAllocator *allocator)
     return result;
 }
 
+void tgui_character_allocator_clear(TGuiCharacterAllocator *allocator)
+{
+    allocator->count = 0;
+    memset(allocator->buffer, 0, allocator->buffer_size);
+}
+
 void tgui_line_allocator_create(TGuiLineAllocator *allocator)
 {
     allocator->buffer_size = TGUI_DEFAULT_NUM_LINES;
@@ -1618,27 +1646,33 @@ void tgui_update(void)
         {
             case TGUI_EVENT_KEYDOWN:
             {
+                // TODO: check where is the best place to update the active textbox
                 if(state->widget_active)
                 {
                     TGuiWidget *widget = tgui_widget_get(state->widget_active);
                     if(widget->header.type == TGUI_TEXTBOX)
                     {
-                        if(event->key.keycode == TGUI_KEYCODE_BACKSPACE)
+                        if(event->key.keycode == TGUI_KEYCODE_ENTER)
                         {
+                            tgui_textbox_push_newline(&widget->textbox);
                         }
-                        if(event->key.keycode == TGUI_KEYCODE_LEFT)
+                        else if(event->key.keycode == TGUI_KEYCODE_BACKSPACE)
+                        {
+                            // TODO: implements delete in textbox
+                        }
+                        else if(event->key.keycode == TGUI_KEYCODE_LEFT)
                         {
                             tgui_textbox_move_cursor_left(&widget->textbox); 
                         }
-                        if(event->key.keycode == TGUI_KEYCODE_RIGHT)
+                        else if(event->key.keycode == TGUI_KEYCODE_RIGHT)
                         {
                             tgui_textbox_move_cursor_right(&widget->textbox); 
                         }
-                        if(event->key.keycode == TGUI_KEYCODE_UP)
+                        else if(event->key.keycode == TGUI_KEYCODE_UP)
                         {
                             tgui_textbox_move_cursor_up(&widget->textbox); 
                         }
-                        if(event->key.keycode == TGUI_KEYCODE_DOWN)
+                        else if(event->key.keycode == TGUI_KEYCODE_DOWN)
                         {
                             tgui_textbox_move_cursor_down(&widget->textbox); 
                         }
@@ -1671,16 +1705,7 @@ void tgui_update(void)
                     TGuiWidget *widget = tgui_widget_get(state->widget_active);
                     if(widget->header.type == TGUI_TEXTBOX)
                     {
-                        if(event->character.character == 13) event->character.character = '\n';
-                        else if((event->character.character < ' ') || (event->character.character > '~')) break;
-                        
-                        if(event->character.character == '\n')
-                        {
-                            tgui_line_allocator_pull(&widget->textbox.allocator);
-                            widget->textbox.cursor_position.y++;
-                            widget->textbox.cursor_position.x = 0;
-                        }
-                        else
+                        if((event->character.character >= ' ') && (event->character.character <= '~'))
                         {
                             tgui_textbox_push_character(&widget->textbox, event->character.character);
                         }
@@ -1781,6 +1806,10 @@ TGuiKeyCode tgui_win32_translate_keycode(u32 keycode)
         case 0x08:
         {
             return TGUI_KEYCODE_BACKSPACE;
+        }break;
+        case 0x0D:
+        {
+            return TGUI_KEYCODE_ENTER;
         }break;
         default:
         {
