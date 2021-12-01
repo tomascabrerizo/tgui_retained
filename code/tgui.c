@@ -158,6 +158,28 @@ static TGuiClipResult tgui_clip_rect(i32 min_x, i32 min_y, i32 max_x, i32 max_y,
 // NOTE: GUI lib functions
 //-----------------------------------------------------
 
+static void tgui_safe_memcpy(void *dst, void *src, u64 number_bytes)
+{
+    if(dst < src)
+    {
+        for(u64 index = 0; index < number_bytes; ++index)
+        {
+            u8 *dst_ptr = (u8 *)dst + index;
+            u8 *src_ptr = (u8 *)src + index;
+            *dst_ptr = *src_ptr;
+        }
+    }
+    else if(dst > src)
+    {
+        for(u64 index = 0; index < number_bytes; ++index)
+        {
+            u8 *dst_ptr = (u8 *)(dst + (number_bytes - 1)) - index;
+            u8 *src_ptr = (u8 *)(src + (number_bytes - 1)) - index;
+            *dst_ptr = *src_ptr;
+        }
+    }
+}
+
 inline static TGuiWidget *tgui_create_widget(TGuiHandle *handle)
 {
     TGuiState *state = &tgui_global_state;
@@ -994,7 +1016,7 @@ static void tgui_textbox_push_character(TGuiWidgetTextBox *textbox, u8 character
     if((u32)textbox->cursor_position.x < (line->count - 1))
     {
         u8 *current_character = line->buffer + textbox->cursor_position.x;
-        memcpy(current_character + 1, current_character, (u64)(last_character - current_character));
+        tgui_safe_memcpy(current_character + 1, current_character, (u64)(last_character - current_character));
         *current_character = character;
     }
     else
@@ -1008,15 +1030,15 @@ static void tgui_textbox_push_character(TGuiWidgetTextBox *textbox, u8 character
 static void tgui_textbox_push_newline(TGuiWidgetTextBox *textbox)
 {
     TGuiCharacterAllocator *last_line = tgui_line_allocator_pull(&textbox->allocator);
-    textbox->cursor_position.y++;
     
     TGuiCharacterAllocator temp_last_line = *last_line;
-    TGuiCharacterAllocator *current_line = textbox->allocator.buffer + (textbox->cursor_position.y - 1);
+    TGuiCharacterAllocator *current_line = textbox->allocator.buffer + textbox->cursor_position.y;
     TGuiCharacterAllocator *next_line = current_line + 1;
 
-    memcpy(current_line + 1, current_line, (u64)(last_line - current_line) * sizeof(TGuiCharacterAllocator));
+    tgui_safe_memcpy(current_line + 1, current_line, (u64)(last_line - current_line) * sizeof(TGuiCharacterAllocator));
     *next_line = temp_last_line;
     u32 characters_to_move = current_line->count - textbox->cursor_position.x;
+    // TODO: this move can be faster if we allocate the necesary space at once and the memcpy
     for(u32 character_index = characters_to_move; character_index > 0; --character_index)
     {
         u8 *character = tgui_character_allocator_pull(next_line);
@@ -1024,7 +1046,22 @@ static void tgui_textbox_push_newline(TGuiWidgetTextBox *textbox)
     }
     current_line->count -= characters_to_move;
     
+    textbox->cursor_position.y++;
     textbox->cursor_position.x = 0;
+}
+
+static void tgui_textbox_delete_current_character(TGuiWidgetTextBox *textbox)
+{
+    if(textbox->cursor_position.x > 0)
+    {
+        TGuiCharacterAllocator *line = textbox->allocator.buffer + textbox->cursor_position.y;
+        u8 *last_character = line->buffer + line->count;
+        u8 *current_character = line->buffer + textbox->cursor_position.x;
+        u8 *prev_character = current_character - 1;
+        tgui_safe_memcpy(prev_character, current_character, (u64)(last_character - current_character));
+        textbox->cursor_position.x--;
+        line->count--;
+    }
 }
 
 static b32 tgui_textbox_update(TGuiState *state, TGuiWidgetTextBox *textbox)
@@ -1658,7 +1695,7 @@ void tgui_update(void)
                         }
                         else if(event->key.keycode == TGUI_KEYCODE_BACKSPACE)
                         {
-                            // TODO: implements delete in textbox
+                            tgui_textbox_delete_current_character(&widget->textbox);
                         }
                         else if(event->key.keycode == TGUI_KEYCODE_LEFT)
                         {
