@@ -1030,12 +1030,11 @@ static void tgui_textbox_push_character(TGuiWidgetTextBox *textbox, u8 character
 static void tgui_textbox_push_newline(TGuiWidgetTextBox *textbox)
 {
     TGuiCharacterAllocator *last_line = tgui_line_allocator_pull(&textbox->allocator);
-    
     TGuiCharacterAllocator temp_last_line = *last_line;
     TGuiCharacterAllocator *current_line = textbox->allocator.buffer + textbox->cursor_position.y;
     TGuiCharacterAllocator *next_line = current_line + 1;
 
-    tgui_safe_memcpy(current_line + 1, current_line, (u64)(last_line - current_line) * sizeof(TGuiCharacterAllocator));
+    tgui_safe_memcpy(next_line, current_line, (u64)(last_line - current_line) * sizeof(TGuiCharacterAllocator));
     *next_line = temp_last_line;
     u32 characters_to_move = current_line->count - textbox->cursor_position.x;
     // TODO: this move can be faster if we allocate the necesary space at once and the memcpy
@@ -1061,6 +1060,30 @@ static void tgui_textbox_delete_current_character(TGuiWidgetTextBox *textbox)
         tgui_safe_memcpy(prev_character, current_character, (u64)(last_character - current_character));
         textbox->cursor_position.x--;
         line->count--;
+    }
+    else if((textbox->cursor_position.x == 0) && (textbox->cursor_position.y > 0))
+    {
+        TGuiCharacterAllocator *current_line = textbox->allocator.buffer + textbox->cursor_position.y;
+        TGuiCharacterAllocator *prev_line = current_line - 1;
+        // TODO: this move can be faster if we allocate the necesary space at once and the memcpy
+        for(u32 character_index = 0; character_index < current_line->count; ++character_index)
+        {
+            u8 *character = tgui_character_allocator_pull(prev_line);
+            *character = current_line->buffer[character_index];
+        }
+        textbox->cursor_position.x = prev_line->count - current_line->count;
+        textbox->cursor_position.y--;
+        
+        TGuiCharacterAllocator *last_line = textbox->allocator.buffer + textbox->allocator.count;
+        if(current_line < (last_line - 1))
+        {
+            TGuiCharacterAllocator temp_current_line = *current_line;
+            TGuiCharacterAllocator *next_line = current_line + 1;
+            tgui_safe_memcpy(current_line, next_line, (u64)(last_line - next_line) * sizeof(TGuiCharacterAllocator));
+            TGuiCharacterAllocator *real_last_line = (last_line - 1);
+            *real_last_line = temp_current_line;
+        }
+        textbox->allocator.count--;
     }
 }
 
@@ -1502,11 +1525,15 @@ void tgui_line_allocator_create(TGuiLineAllocator *allocator)
     allocator->buffer_size = TGUI_DEFAULT_NUM_LINES;
     allocator->buffer = (TGuiCharacterAllocator *)malloc(allocator->buffer_size*sizeof(TGuiCharacterAllocator));
     allocator->count = 0;
+    for(u32 index = 0; index < TGUI_DEFAULT_NUM_LINES; ++index)
+    {
+        tgui_character_allocator_create(allocator->buffer + index);
+    }
 }
 
 void tgui_line_allocator_destory(TGuiLineAllocator *allocator)
 {
-    for(u32 index = 0; index < allocator->count; ++index)
+    for(u32 index = 0; index < allocator->buffer_size; ++index)
     {
         tgui_character_allocator_destory(allocator->buffer + index);
     }
@@ -1523,12 +1550,16 @@ TGuiCharacterAllocator *tgui_line_allocator_pull(TGuiLineAllocator *allocator)
         u32 new_buffer_size = allocator->buffer_size * 2;
         TGuiCharacterAllocator *new_buffer = (TGuiCharacterAllocator *)malloc(new_buffer_size*sizeof(TGuiCharacterAllocator));
         memcpy(new_buffer, allocator->buffer, allocator->buffer_size*sizeof(TGuiCharacterAllocator));
+        for(u32 index = allocator->buffer_size; index < new_buffer_size; ++index)
+        {
+            tgui_character_allocator_create(new_buffer + index);
+        }
         allocator->buffer = new_buffer;
         allocator->buffer_size = new_buffer_size;
     }
     result = allocator->buffer + allocator->count;
-    tgui_character_allocator_create(result);
     allocator->count++;
+    result->count = 0;
     return result;
 }
 
