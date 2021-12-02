@@ -1033,8 +1033,8 @@ static void tgui_textbox_push_newline(TGuiWidgetTextBox *textbox)
     TGuiCharacterAllocator temp_last_line = *last_line;
     TGuiCharacterAllocator *current_line = textbox->allocator.buffer + textbox->cursor_position.y;
     TGuiCharacterAllocator *next_line = current_line + 1;
-
-    tgui_safe_memcpy(next_line, current_line, (u64)(last_line - current_line) * sizeof(TGuiCharacterAllocator));
+    
+    tgui_safe_memcpy(next_line, current_line, ((u8 *)last_line - (u8 *)current_line));
     *next_line = temp_last_line;
     u32 characters_to_move = current_line->count - textbox->cursor_position.x;
     // TODO: this move can be faster if we allocate the necesary space at once and the memcpy
@@ -1079,7 +1079,7 @@ static void tgui_textbox_delete_current_character(TGuiWidgetTextBox *textbox)
         {
             TGuiCharacterAllocator temp_current_line = *current_line;
             TGuiCharacterAllocator *next_line = current_line + 1;
-            tgui_safe_memcpy(current_line, next_line, (u64)(last_line - next_line) * sizeof(TGuiCharacterAllocator));
+            tgui_safe_memcpy(current_line, next_line, ((u8 *)last_line - (u8 *)next_line));
             TGuiCharacterAllocator *real_last_line = (last_line - 1);
             *real_last_line = temp_current_line;
         }
